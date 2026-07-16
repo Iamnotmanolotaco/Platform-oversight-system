@@ -1,8 +1,7 @@
-# requirements.txt
-streamlit==1.28.0
-pandas==2.1.0
+streamlit==1.28.1
+pandas==1.5.3
 numpy==1.24.3
 openpyxl==3.1.2
 python-dateutil==2.8.2
 requests==2.31.0
-urllib3==2.0.7
+xlrd==2.0.1
