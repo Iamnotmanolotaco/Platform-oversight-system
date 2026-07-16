@@ -1,15 +1,10 @@
-# app.py - Aplicación Streamlit Completa
+# app.py - Reporte de Tiempos (Versión Streamlit)
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import os
 import re
-import requests
-from io import BytesIO
-import tempfile
-import base64
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -25,7 +20,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# ESTILOS CSS PERSONALIZADOS
+# ESTILOS CSS (opcional, mejora visual)
 # ============================================================
 
 st.markdown("""
@@ -55,10 +50,6 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         text-align: center;
         border-top: 4px solid #2c5f8a;
-        transition: transform 0.2s;
-    }
-    .card-metric:hover {
-        transform: translateY(-3px);
     }
     .card-metric .value {
         font-size: 28px;
@@ -78,7 +69,6 @@ st.markdown("""
         padding: 12px 16px;
         border-radius: 10px;
         margin: 10px 0;
-        color: #7d6608;
     }
     .success-box {
         background: #eafaf1;
@@ -96,46 +86,11 @@ st.markdown("""
         background: #fafbfc;
         margin: 1rem 0;
     }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 4px 4px 0 0;
-        padding: 8px 16px;
-        background-color: #f0f2f6;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1a3a5c !important;
-        color: white !important;
-    }
-    .tag {
-        display: inline-block;
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 10px;
-        font-weight: 700;
-        color: white;
-        margin: 1px 2px;
-    }
-    .tag-cl { background: #3498db; }
-    .tag-sb { background: #2ecc71; }
-    .tag-tg { background: #e67e22; }
-    .tag-permiso { background: #8e44ad; }
-    .tag-novedad { background: #e74c3c; }
-    
-    .footer {
-        text-align: center;
-        color: #95a5a6;
-        font-size: 12px;
-        padding: 20px 0;
-        border-top: 1px solid #eef2f7;
-        margin-top: 30px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# FUNCIONES DE PROCESAMIENTO
+# FUNCIONES DE CONVERSIÓN
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -161,8 +116,6 @@ def convertir_hora_tiempo(valor):
         except:
             pass
         return 0.0
-    if isinstance(valor, pd.Timedelta):
-        return valor.total_seconds() / 3600
     return 0.0
 
 def convertir_hora_decimal(valor):
@@ -183,8 +136,6 @@ def convertir_hora_decimal(valor):
         except:
             pass
         return 0.0
-    if isinstance(valor, pd.Timedelta):
-        return valor.total_seconds() / 3600
     return 0.0
 
 def convertir_horas_segun_formato(valor, formato):
@@ -223,14 +174,14 @@ def limpiar_nombre(nombre):
     nombre = re.sub(r'\s+', ' ', nombre)
     return nombre.strip()
 
-def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
+def convertir_fecha(valor):
     if pd.isna(valor):
         return None
     if isinstance(valor, (pd.Timestamp, datetime)):
         return valor.date()
     if isinstance(valor, str):
         try:
-            return datetime.strptime(valor.strip(), formato_fecha).date()
+            return datetime.strptime(valor.strip(), '%m/%d/%Y').date()
         except:
             try:
                 return pd.to_datetime(valor).date()
@@ -241,7 +192,7 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
     except:
         return None
 
-def get_jornada_esperada_por_dia(fecha):
+def get_jornada_esperada(fecha):
     if fecha.weekday() == 5:
         return 4.0
     elif fecha.weekday() == 6:
@@ -250,7 +201,49 @@ def get_jornada_esperada_por_dia(fecha):
         return 8.0
 
 # ============================================================
-# CLASE PROCESADOR
+# CONFIGURACIÓN DE COLUMNAS
+# ============================================================
+
+COLUMNAS_PLATAFORMAS = {
+    'camp_legal': {
+        'columnas': {
+            'nombre': 'Staff Name',
+            'horas': 'Hours Spent',
+            'fecha': 'Time Entry Date',
+            'actividad': 'Activity'
+        },
+        'formato_horas': 'tiempo'
+    },
+    'smokeball': {
+        'columnas': {
+            'nombre': 'Name',
+            'horas': 'Hours',
+            'fecha': 'Date',
+            'actividad': 'Subject'
+        },
+        'formato_horas': 'decimal'
+    },
+    'toggl': {
+        'columnas': {
+            'nombre': 'Member',
+            'horas': 'Dur',
+            'fecha': 'Date1',
+            'actividad': 'Project'
+        },
+        'formato_horas': 'tiempo'
+    }
+}
+
+COLUMNAS_POWERBI = {
+    'nombre': 'NAME CORRECT',
+    'nombre_cl': 'NAME CL',
+    'nombre_sb': 'NAME SB',
+    'nombre_tg': 'NAME TG',
+    'status': 'USER STATUS'
+}
+
+# ============================================================
+# CLASE PROCESADOR (TU CÓDIGO ORIGINAL ADAPTADO)
 # ============================================================
 
 class ProcesadorReporte:
@@ -288,7 +281,7 @@ class ProcesadorReporte:
         total = 0
         fecha_actual = self.fecha_inicio
         while fecha_actual <= self.fecha_fin:
-            total += get_jornada_esperada_por_dia(fecha_actual)
+            total += get_jornada_esperada(fecha_actual)
             fecha_actual += timedelta(days=1)
         return max(total, 1)
     
@@ -296,7 +289,7 @@ class ProcesadorReporte:
         dias = []
         fecha_actual = self.fecha_inicio
         while fecha_actual <= self.fecha_fin:
-            jornada = get_jornada_esperada_por_dia(fecha_actual)
+            jornada = get_jornada_esperada(fecha_actual)
             if jornada > 0:
                 dias.append((fecha_actual, jornada))
             fecha_actual += timedelta(days=1)
@@ -344,12 +337,11 @@ class ProcesadorReporte:
         if self.df_powerbi is None:
             return False
         
-        cols = COLUMNAS_POWERBI
-        col_canonico = cols.get('nombre', 'NAME CORRECT')
-        col_cl = cols.get('nombre_cl', 'NAME CL')
-        col_sb = cols.get('nombre_sb', 'NAME SB')
-        col_tg = cols.get('nombre_tg', 'NAME TG')
-        col_status = cols.get('status', 'USER STATUS')
+        col_canonico = COLUMNAS_POWERBI['nombre']
+        col_cl = COLUMNAS_POWERBI['nombre_cl']
+        col_sb = COLUMNAS_POWERBI['nombre_sb']
+        col_tg = COLUMNAS_POWERBI['nombre_tg']
+        col_status = COLUMNAS_POWERBI['status']
         
         if col_status in self.df_powerbi.columns:
             df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
@@ -359,7 +351,7 @@ class ProcesadorReporte:
         self.mapa_nombres = {}
         self.usuarios_con_plataforma = []
         
-        for idx, row in df_activos.iterrows():
+        for _, row in df_activos.iterrows():
             nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
             if not nombre_canonico:
                 continue
@@ -402,12 +394,13 @@ class ProcesadorReporte:
     def procesar_novedades(self):
         novedades_list = []
         
+        # Novedades MAX
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
                 df_max['Usuario_Normalizado'] = df_max['Persona'].apply(self.normalizar_nombre)
-                df_max['Fecha_Inicio'] = df_max['Fecha Inicio'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                df_max['Fecha_Fin'] = df_max['Fecha Fin'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                df_max['Fecha_Inicio'] = df_max['Fecha Inicio'].apply(convertir_fecha)
+                df_max['Fecha_Fin'] = df_max['Fecha Fin'].apply(convertir_fecha)
                 df_max_validos = df_max[df_max['Fecha_Inicio'].notna() & df_max['Fecha_Fin'].notna()]
                 if 'Tipo de Novedad' in df_max.columns:
                     df_max_validos['Tipo'] = df_max_validos['Tipo de Novedad']
@@ -415,10 +408,11 @@ class ProcesadorReporte:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
         
+        # Novedades MAX 2
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
-                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(convertir_fecha)
                 df_max2_filtrado = df_max2[
                     (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
                     (df_max2['Fecha_Conv'] <= self.fecha_fin)
@@ -440,12 +434,13 @@ class ProcesadorReporte:
                 df_max2_validos['Usuario_Normalizado'] = df_max2_validos['Persona'].apply(self.normalizar_nombre)
                 novedades_list.append(df_max2_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
         
+        # Novedades CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
                 df_clg['Usuario_Normalizado'] = df_clg['Persona'].apply(self.normalizar_nombre)
-                df_clg['Fecha_Inicio'] = df_clg['Fecha Inicio'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                df_clg['Fecha_Fin'] = df_clg['Fecha Fin'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                df_clg['Fecha_Inicio'] = df_clg['Fecha Inicio'].apply(convertir_fecha)
+                df_clg['Fecha_Fin'] = df_clg['Fecha Fin'].apply(convertir_fecha)
                 df_clg_validos = df_clg[df_clg['Fecha_Inicio'].notna() & df_clg['Fecha_Fin'].notna()]
                 if 'Tipo de Novedad' in df_clg.columns:
                     df_clg_validos['Tipo'] = df_clg_validos['Tipo de Novedad']
@@ -478,7 +473,6 @@ class ProcesadorReporte:
         config = COLUMNAS_PLATAFORMAS[config_key]
         cols = config['columnas']
         formato_horas = config.get('formato_horas', 'auto')
-        formato_fecha = config.get('formato_fecha', '%m/%d/%Y')
         
         col_nombre = cols.get('nombre')
         col_horas = cols.get('horas')
@@ -493,7 +487,7 @@ class ProcesadorReporte:
         df_proc['Horas'] = df_proc[col_horas].apply(lambda x: convertir_horas_segun_formato(x, formato_horas))
         
         try:
-            df_proc['Date'] = df_proc[col_fecha].apply(lambda x: convertir_fecha(x, formato_fecha))
+            df_proc['Date'] = df_proc[col_fecha].apply(convertir_fecha)
         except:
             df_proc['Date'] = self.fecha_inicio
         
@@ -600,7 +594,6 @@ class ProcesadorReporte:
             detalle_items = []
             for dia, horas in data['Detalle_Diario'].items():
                 if horas > 0:
-                    jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
                     detalle_items.append(f"{dia}: {horas:.1f}h")
             detalle_str = ' | '.join(detalle_items)
             
@@ -676,52 +669,7 @@ class ProcesadorReporte:
         }
 
 # ============================================================
-# CONFIGURACIÓN DE COLUMNAS
-# ============================================================
-
-COLUMNAS_PLATAFORMAS = {
-    'camp_legal': {
-        'columnas': {
-            'nombre': 'Staff Name',
-            'horas': 'Hours Spent',
-            'fecha': 'Time Entry Date',
-            'actividad': 'Activity'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'smokeball': {
-        'columnas': {
-            'nombre': 'Name',
-            'horas': 'Hours',
-            'fecha': 'Date',
-            'actividad': 'Subject'
-        },
-        'formato_horas': 'decimal',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'toggl': {
-        'columnas': {
-            'nombre': 'Member',
-            'horas': 'Dur',
-            'fecha': 'Date1',
-            'actividad': 'Project'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    }
-}
-
-COLUMNAS_POWERBI = {
-    'nombre': 'NAME CORRECT',
-    'nombre_cl': 'NAME CL',
-    'nombre_sb': 'NAME SB',
-    'nombre_tg': 'NAME TG',
-    'status': 'USER STATUS'
-}
-
-# ============================================================
-# INTERFAZ PRINCIPAL
+# INTERFAZ DE USUARIO
 # ============================================================
 
 def main():
@@ -779,62 +727,51 @@ def main():
         
         uploaded_files = {}
         
-        with st.expander("📊 Power BI Resources", expanded=False):
-            uploaded_files['powerbi'] = st.file_uploader(
-                "Power BI resources.xlsx",
-                type=['xlsx'],
-                key="powerbi",
-                label_visibility="collapsed"
-            )
+        uploaded_files['powerbi'] = st.file_uploader(
+            "📊 Power BI resources.xlsx",
+            type=['xlsx'],
+            key="powerbi"
+        )
         
-        with st.expander("🏛️ Camp Legal", expanded=False):
-            uploaded_files['camp_legal'] = st.file_uploader(
-                "Reporte Diario Camp Legal.xlsx",
-                type=['xlsx'],
-                key="camp_legal",
-                label_visibility="collapsed"
-            )
+        uploaded_files['camp_legal'] = st.file_uploader(
+            "🏛️ Reporte Diario Camp Legal.xlsx",
+            type=['xlsx'],
+            key="camp_legal"
+        )
         
-        with st.expander("📋 Smokeball", expanded=False):
-            uploaded_files['smokeball'] = st.file_uploader(
-                "Reporte_general.xlsx",
-                type=['xlsx'],
-                key="smokeball",
-                label_visibility="collapsed"
-            )
+        uploaded_files['smokeball'] = st.file_uploader(
+            "📋 Reporte_general.xlsx",
+            type=['xlsx'],
+            key="smokeball"
+        )
         
-        with st.expander("⏱️ Toggl", expanded=False):
-            uploaded_files['toggl'] = st.file_uploader(
-                "Revision de entradas de tiempo - Toggl.xlsx",
-                type=['xlsx'],
-                key="toggl",
-                label_visibility="collapsed"
-            )
+        uploaded_files['toggl'] = st.file_uploader(
+            "⏱️ Revision de entradas de tiempo - Toggl.xlsx",
+            type=['xlsx'],
+            key="toggl"
+        )
         
-        with st.expander("📋 Novedades", expanded=False):
-            uploaded_files['novedades_max'] = st.file_uploader(
-                "Template_Novedades_RRHH_MAX 1 1 2.xlsx (Novedades)",
-                type=['xlsx'],
-                key="novedades_max",
-                label_visibility="collapsed"
-            )
-            uploaded_files['novedades_max_2'] = st.file_uploader(
-                "Template_Novedades_RRHH_MAX 1 1 2.xlsx (Novedades 2)",
-                type=['xlsx'],
-                key="novedades_max_2",
-                label_visibility="collapsed"
-            )
-            uploaded_files['novedades_clg'] = st.file_uploader(
-                "Template_Novedades_RRHH_CLG - last.xlsx",
-                type=['xlsx'],
-                key="novedades_clg",
-                label_visibility="collapsed"
-            )
+        uploaded_files['novedades_max'] = st.file_uploader(
+            "📋 Template_Novedades_RRHH_MAX (Novedades)",
+            type=['xlsx'],
+            key="novedades_max"
+        )
+        
+        uploaded_files['novedades_max_2'] = st.file_uploader(
+            "📋 Template_Novedades_RRHH_MAX (Novedades 2)",
+            type=['xlsx'],
+            key="novedades_max_2"
+        )
+        
+        uploaded_files['novedades_clg'] = st.file_uploader(
+            "📋 Template_Novedades_RRHH_CLG",
+            type=['xlsx'],
+            key="novedades_clg"
+        )
         
         st.divider()
         
         archivos_cargados = sum([1 for v in uploaded_files.values() if v is not None])
-        
         st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/7")
         
         procesar = st.button(
@@ -849,39 +786,18 @@ def main():
         st.info("👈 Sube los archivos requeridos en la barra lateral y presiona 'Generar Reporte'")
         
         st.markdown("### 📋 Archivos requeridos")
+        st.markdown("""
+        **Obligatorios:**
+        - ✅ Power BI Resources
+        - ✅ Camp Legal
+        - ✅ Smokeball
+        - ✅ Toggl
+        - ✅ Novedades MAX (Novedades 2)
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("""
-            **Obligatorios:**
-            - ✅ Power BI Resources
-            - ✅ Camp Legal
-            - ✅ Smokeball
-            - ✅ Toggl
-            - ✅ Novedades MAX (Novedades 2)
-            """)
-        with col2:
-            st.markdown("""
-            **Opcionales:**
-            - Novedades MAX (Novedades)
-            - Novedades CLG
-            """)
-        with col3:
-            st.markdown("""
-            **📌 Nota:**
-            - El reporte solo muestra usuarios en Novedades 2
-            - Sábados: 4h · Festivos: 0h
-            """)
-        
-        st.markdown("---")
-        st.markdown("### 💡 Ejemplo de uso")
-        st.code("""
-        1. Sube los 4 archivos obligatorios
-        2. Selecciona el rango de fechas
-        3. Presiona "Generar Reporte"
-        4. Visualiza los resultados
-        """, language="text")
-        
+        **Opcionales:**
+        - Novedades MAX (Novedades)
+        - Novedades CLG
+        """)
         return
     
     # Procesar reporte
@@ -992,14 +908,11 @@ def main():
             # Tabla de resultados
             st.markdown("### 👥 Detalle por Usuario")
             
-            # Mostrar tabla con formato
-            df_mostrar = df_resultados.copy()
-            df_mostrar = df_mostrar[[
+            df_mostrar = df_resultados[[
                 'Usuario', 'Camp Legal', 'Smokeball', 'Toggl', 
                 'Total_Horas', 'Dias_Activos', 'Permiso', 'Estado'
-            ]]
+            ]].copy()
             
-            # Renombrar columnas para mejor visualización
             df_mostrar.columns = [
                 'Usuario', 'Camp Legal', 'Smokeball', 'Toggl',
                 'Total Horas', 'Días Activos', 'Permiso', 'Estado'
@@ -1012,35 +925,9 @@ def main():
                 hide_index=True
             )
             
-            # Información adicional
-            st.markdown("---")
-            st.markdown("### 📋 Información Adicional")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"""
-                <div class="info-box">
-                    <strong>📊 Jornada total esperada:</strong> {procesador.jornada_total_esperada:.0f}h<br>
-                    <strong>📅 Días hábiles:</strong> {procesador.dias_habiles}<br>
-                    <strong>📋 Usuarios en Novedades 2:</strong> {len(procesador.usuarios_novedades_2)}
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="success-box">
-                    <strong>✅ Resumen:</strong><br>
-                    • {estadisticas['total_usuarios']} usuarios con turno<br>
-                    • {estadisticas['total_horas']:.1f} horas totales<br>
-                    • Promedio de {estadisticas['promedio']:.1f} horas por usuario
-                </div>
-                """, unsafe_allow_html=True)
-            
             # Descargar resultados
             st.markdown("### 📥 Exportar")
             
-            # Convertir a CSV para descarga
             csv = df_resultados.to_csv(index=False).encode('utf-8')
             
             col1, col2 = st.columns(2)
@@ -1048,60 +935,28 @@ def main():
                 st.download_button(
                     label="📥 Descargar CSV",
                     data=csv,
-                    file_name=f"reporte_tiempos_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.csv",
+                    file_name=f"reporte_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
             
             with col2:
-                # Crear Excel con múltiples hojas
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_resultados.to_excel(writer, sheet_name='Reporte', index=False)
-                    # Agregar hoja de resumen
-                    resumen = pd.DataFrame([{
-                        'Metrica': 'Total Usuarios',
-                        'Valor': estadisticas['total_usuarios']
-                    }, {
-                        'Metrica': 'Total Horas',
-                        'Valor': estadisticas['total_horas']
-                    }, {
-                        'Metrica': 'Promedio',
-                        'Valor': estadisticas['promedio']
-                    }, {
-                        'Metrica': 'Con Permiso',
-                        'Valor': estadisticas['con_permiso']
-                    }, {
-                        'Metrica': 'Horas Camp Legal',
-                        'Valor': estadisticas['horas_camp']
-                    }, {
-                        'Metrica': 'Horas Smokeball',
-                        'Valor': estadisticas['horas_sb']
-                    }, {
-                        'Metrica': 'Horas Toggl',
-                        'Valor': estadisticas['horas_tg']
-                    }])
-                    resumen.to_excel(writer, sheet_name='Resumen', index=False)
+                output = pd.ExcelWriter('reporte.xlsx', engine='openpyxl')
+                df_resultados.to_excel(output, sheet_name='Reporte', index=False)
+                output.close()
                 
-                output.seek(0)
-                st.download_button(
-                    label="📥 Descargar Excel",
-                    data=output,
-                    file_name=f"reporte_tiempos_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                with open('reporte.xlsx', 'rb') as f:
+                    st.download_button(
+                        label="📥 Descargar Excel",
+                        data=f,
+                        file_name=f"reporte_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
             
         except Exception as e:
             st.error(f"❌ Error al procesar el reporte: {e}")
             st.exception(e)
-    
-    # Footer
-    st.markdown("""
-    <div class="footer">
-        Reporte generado automáticamente · Datos de Camp Legal, Smokeball y Toggl
-    </div>
-    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
