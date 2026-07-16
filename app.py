@@ -1,109 +1,141 @@
-# sistema_reporte_tiempos_v33.py
-# VERSIÓN CON FILTRO CORRECTO DE NOVEDADES 2
+# app.py - Aplicación Streamlit Completa
 
+import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
-import sys
 import re
+import requests
+from io import BytesIO
+import tempfile
+import base64
 import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================
-# CONFIGURACIÓN - RUTA UNIFICADA
+# CONFIGURACIÓN DE LA PÁGINA
 # ============================================================
 
-RUTA_BASE = r"C:\Users\MSI\OneDrive - Community Law Group\Automation\Data Automation Platforms"
+st.set_page_config(
+    page_title="📊 Reporte de Tiempos",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # ============================================================
-# MAPEO DE COLUMNAS POR ARCHIVO
+# ESTILOS CSS PERSONALIZADOS
 # ============================================================
 
-COLUMNAS_MAPEO = {
-    'camp_legal': {
-        'archivo': 'Reporte Diario Camp Legal.xlsx',
-        'hoja_datos': 'Time entries',
-        'columnas': {
-            'nombre': 'Staff Name',
-            'horas': 'Hours Spent',
-            'fecha': 'Time Entry Date',
-            'actividad': 'Activity'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'smokeball': {
-        'archivo': 'Reporte_general.xlsx',
-        'hoja_datos': 'Entries',
-        'columnas': {
-            'nombre': 'Name',
-            'horas': 'Hours',
-            'fecha': 'Date',
-            'actividad': 'Subject'
-        },
-        'formato_horas': 'decimal',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'toggl': {
-        'archivo': 'Revision de entradas de tiempo - Toggl.xlsx',
-        'hoja_datos': 'DataBaseToggl',
-        'columnas': {
-            'nombre': 'Member',
-            'horas': 'Dur',
-            'fecha': 'Date1',
-            'actividad': 'Project'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'powerbi': {
-        'archivo': 'Power BI resources.xlsx',
-        'hoja_datos': 'Names',
-        'columnas': {
-            'nombre': 'NAME CORRECT',
-            'nombre_cl': 'NAME CL',
-            'nombre_sb': 'NAME SB',
-            'nombre_tg': 'NAME TG',
-            'status': 'USER STATUS'
-        }
-    },
-    'novedades_max': {
-        'archivo': 'Template_Novedades_RRHH_MAX 1 1 2.xlsx',
-        'hoja_datos': 'Novedades',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha_inicio': 'Fecha Inicio',
-            'fecha_fin': 'Fecha Fin',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'novedades_max_2': {
-        'archivo': 'Template_Novedades_RRHH_MAX 1 1 2.xlsx',
-        'hoja_datos': 'Novedades 2',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha': 'Fecha',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'novedades_clg': {
-        'archivo': 'Template_Novedades_RRHH_CLG - last.xlsx',
-        'hoja_datos': 'Novedades',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha_inicio': 'Fecha Inicio',
-            'fecha_fin': 'Fecha Fin',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
+st.markdown("""
+<style>
+    .main-header {
+        background: linear-gradient(135deg, #1a3a5c 0%, #2c5f8a 100%);
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(26,58,92,0.3);
     }
-}
+    .main-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    .main-header p {
+        margin: 0.3rem 0 0 0;
+        opacity: 0.85;
+        font-size: 1rem;
+    }
+    .card-metric {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        text-align: center;
+        border-top: 4px solid #2c5f8a;
+        transition: transform 0.2s;
+    }
+    .card-metric:hover {
+        transform: translateY(-3px);
+    }
+    .card-metric .value {
+        font-size: 28px;
+        font-weight: 800;
+        color: #1a3a5c;
+    }
+    .card-metric .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #7a8a9e;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    .info-box {
+        background: #fef9e7;
+        border: 1px solid #f9e79f;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin: 10px 0;
+        color: #7d6608;
+    }
+    .success-box {
+        background: #eafaf1;
+        border: 1px solid #a9dfbf;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin: 10px 0;
+        color: #1a7a42;
+    }
+    .upload-box {
+        border: 2px dashed #bdc3c7;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        background: #fafbfc;
+        margin: 1rem 0;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 4px 4px 0 0;
+        padding: 8px 16px;
+        background-color: #f0f2f6;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1a3a5c !important;
+        color: white !important;
+    }
+    .tag {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 700;
+        color: white;
+        margin: 1px 2px;
+    }
+    .tag-cl { background: #3498db; }
+    .tag-sb { background: #2ecc71; }
+    .tag-tg { background: #e67e22; }
+    .tag-permiso { background: #8e44ad; }
+    .tag-novedad { background: #e74c3c; }
+    
+    .footer {
+        text-align: center;
+        color: #95a5a6;
+        font-size: 12px;
+        padding: 20px 0;
+        border-top: 1px solid #eef2f7;
+        margin-top: 30px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN
+# FUNCIONES DE PROCESAMIENTO
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -186,9 +218,6 @@ def limpiar_nombre(nombre):
             nombre = nombre[len(prefijo) + 1:]
         elif nombre.startswith(prefijo + ':'):
             nombre = nombre[len(prefijo) + 1:]
-        elif nombre.startswith(prefijo):
-            if len(nombre) > len(prefijo) and nombre[len(prefijo)] in [' ', '-', ':']:
-                nombre = nombre[len(prefijo) + 1:]
     nombre = re.sub(r'\([^)]*\)', '', nombre).strip()
     nombre = re.sub(r'\[[^\]]*\]', '', nombre).strip()
     nombre = re.sub(r'\s+', ' ', nombre)
@@ -212,54 +241,22 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
     except:
         return None
 
-def es_festivo(fecha):
-    """Determina si una fecha es festivo"""
-    # Festivos de Colombia (puedes modificarlos según tu país)
-    festivos = [
-        (1, 1),   # Año Nuevo
-        (5, 1),   # Día del Trabajo
-        (7, 20),  # Día de la Independencia
-        (8, 7),   # Batalla de Boyacá
-        (12, 8),  # Día de la Inmaculada Concepción
-        (12, 25), # Navidad
-    ]
-    return (fecha.month, fecha.day) in festivos
-
 def get_jornada_esperada_por_dia(fecha):
-    """Retorna la jornada esperada para un día específico"""
-    if fecha.weekday() == 5:  # Sábado
+    if fecha.weekday() == 5:
         return 4.0
-    elif fecha.weekday() == 6:  # Domingo
-        return 0.0
-    elif es_festivo(fecha):
+    elif fecha.weekday() == 6:
         return 0.0
     else:
         return 8.0
 
 # ============================================================
-# CLASE PRINCIPAL
+# CLASE PROCESADOR
 # ============================================================
 
-class ReporteTiemposSystem:
-    def __init__(self, fecha_inicio=None, fecha_fin=None):
-        self.today = datetime.now().date()
-        
-        if fecha_inicio is None:
-            self.fecha_inicio = self.today - timedelta(days=1)
-        else:
-            self.fecha_inicio = fecha_inicio
-            
-        if fecha_fin is None:
-            self.fecha_fin = self.fecha_inicio
-        else:
-            self.fecha_fin = fecha_fin
-        
-        if self.fecha_inicio > self.fecha_fin:
-            self.fecha_inicio, self.fecha_fin = self.fecha_fin, self.fecha_inicio
-        
-        self.fecha_inicio_str = self.fecha_inicio.strftime('%Y%m%d')
-        self.fecha_fin_str = self.fecha_fin.strftime('%Y%m%d')
-        self.ruta_base = RUTA_BASE
+class ProcesadorReporte:
+    def __init__(self, fecha_inicio, fecha_fin):
+        self.fecha_inicio = fecha_inicio
+        self.fecha_fin = fecha_fin
         self.jornada_esperada = 8.0
         
         self.df_camp = None
@@ -269,29 +266,16 @@ class ReporteTiemposSystem:
         self.df_novedades_max = None
         self.df_novedades_max_2 = None
         self.df_novedades_clg = None
-        self.df_novedades_combinadas = None
         self.df_analisis = None
-        self.df_detalle_diario = None
         
         self.mapa_nombres = {}
         self.usuarios_con_plataforma = []
-        
-        # Lista de usuarios que aparecen en Novedades 2
         self.usuarios_novedades_2 = set()
         
-        # Calcular días en el rango
-        self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
-        
-        # Calcular jornada total esperada considerando sábados y festivos
         self.jornada_total_esperada = self._calcular_jornada_total()
-        
-        print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
-        print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
-        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
     
     def _calcular_dias_habiles(self):
-        """Calcula los días hábiles (lunes a viernes) en el rango"""
         dias = 0
         fecha_actual = self.fecha_inicio
         while fecha_actual <= self.fecha_fin:
@@ -301,7 +285,6 @@ class ReporteTiemposSystem:
         return max(dias, 1)
     
     def _calcular_jornada_total(self):
-        """Calcula la jornada total esperada considerando sábados, domingos y festivos"""
         total = 0
         fecha_actual = self.fecha_inicio
         while fecha_actual <= self.fecha_fin:
@@ -310,7 +293,6 @@ class ReporteTiemposSystem:
         return max(total, 1)
     
     def _obtener_dias_con_jornada(self):
-        """Obtiene la lista de días en el rango con su jornada esperada"""
         dias = []
         fecha_actual = self.fecha_inicio
         while fecha_actual <= self.fecha_fin:
@@ -320,136 +302,49 @@ class ReporteTiemposSystem:
             fecha_actual += timedelta(days=1)
         return dias
     
-    # ============================================================
-    # LECTURA DE ARCHIVOS
-    # ============================================================
+    def cargar_archivo(self, archivo_bytes, key):
+        try:
+            df = pd.read_excel(archivo_bytes)
+            if key == 'powerbi':
+                self.df_powerbi = df
+            elif key == 'camp_legal':
+                self.df_camp = df
+            elif key == 'smokeball':
+                self.df_smokeball = df
+            elif key == 'toggl':
+                self.df_toggl = df
+            elif key == 'novedades_max':
+                self.df_novedades_max = df
+            elif key == 'novedades_max_2':
+                self.df_novedades_max_2 = df
+            elif key == 'novedades_clg':
+                self.df_novedades_clg = df
+            return True
+        except Exception as e:
+            st.error(f"Error cargando {key}: {e}")
+            return False
     
-    def leer_archivos(self):
-        print("\n" + "="*70)
-        print("📂 LEYENDO ARCHIVOS")
-        print("="*70)
-        
-        for key, config in COLUMNAS_MAPEO.items():
-            nombre = config['archivo']
-            ruta = os.path.join(self.ruta_base, nombre)
-            print(f"\n📄 Buscando: {nombre}")
-            
-            if not os.path.exists(ruta):
-                print(f"   ❌ Archivo NO ENCONTRADO")
-                if key == 'camp_legal':
-                    self.df_camp = None
-                elif key == 'smokeball':
-                    self.df_smokeball = None
-                elif key == 'toggl':
-                    self.df_toggl = None
-                elif key == 'powerbi':
-                    self.df_powerbi = None
-                elif key == 'novedades_max':
-                    self.df_novedades_max = None
-                elif key == 'novedades_max_2':
-                    self.df_novedades_max_2 = None
-                elif key == 'novedades_clg':
-                    self.df_novedades_clg = None
-                continue
-            
-            try:
-                if key == 'powerbi':
-                    hoja_datos = config.get('hoja_datos', 'Names')
-                    xl = pd.ExcelFile(ruta)
-                    hojas_disponibles = xl.sheet_names
-                    if hoja_datos in hojas_disponibles:
-                        df = pd.read_excel(ruta, sheet_name=hoja_datos)
-                        print(f"   ✅ Hoja '{hoja_datos}' cargada: {len(df)} registros")
-                        self.df_powerbi = df
-                    else:
-                        print(f"   ❌ Hoja '{hoja_datos}' no encontrada")
-                        self.df_powerbi = None
-                    continue
-                
-                hoja_datos = config.get('hoja_datos', 'Hoja1')
-                try:
-                    xl = pd.ExcelFile(ruta)
-                except PermissionError:
-                    print(f"   ⚠️ Archivo bloqueado - cierra el archivo y vuelve a ejecutar")
-                    continue
-                
-                hojas_disponibles = xl.sheet_names
-                if hoja_datos in hojas_disponibles:
-                    df = pd.read_excel(ruta, sheet_name=hoja_datos)
-                    print(f"   ✅ Hoja '{hoja_datos}' cargada: {len(df)} registros")
-                    
-                    if key == 'camp_legal':
-                        self.df_camp = df
-                    elif key == 'smokeball':
-                        self.df_smokeball = df
-                    elif key == 'toggl':
-                        self.df_toggl = df
-                    elif key == 'novedades_max':
-                        self.df_novedades_max = df
-                    elif key == 'novedades_max_2':
-                        self.df_novedades_max_2 = df
-                        print(f"\n   📊 NOVEDADES 2 - Muestra:")
-                        if 'Persona' in df.columns and 'Fecha' in df.columns:
-                            print(df[['Persona', 'Fecha', 'Tipo de Novedad']].head(5))
-                    elif key == 'novedades_clg':
-                        self.df_novedades_clg = df
-                else:
-                    print(f"   ❌ Hoja '{hoja_datos}' no encontrada")
-                    if key == 'camp_legal':
-                        self.df_camp = None
-                    elif key == 'smokeball':
-                        self.df_smokeball = None
-                    elif key == 'toggl':
-                        self.df_toggl = None
-                    elif key == 'novedades_max':
-                        self.df_novedades_max = None
-                    elif key == 'novedades_max_2':
-                        self.df_novedades_max_2 = None
-                    elif key == 'novedades_clg':
-                        self.df_novedades_clg = None
-                
-            except Exception as e:
-                print(f"   ❌ Error: {e}")
-                if key == 'camp_legal':
-                    self.df_camp = None
-                elif key == 'smokeball':
-                    self.df_smokeball = None
-                elif key == 'toggl':
-                    self.df_toggl = None
-                elif key == 'powerbi':
-                    self.df_powerbi = None
-                elif key == 'novedades_max':
-                    self.df_novedades_max = None
-                elif key == 'novedades_max_2':
-                    self.df_novedades_max_2 = None
-                elif key == 'novedades_clg':
-                    self.df_novedades_clg = None
-        
-        cargados = sum([
-            self.df_camp is not None,
-            self.df_smokeball is not None,
-            self.df_toggl is not None,
-            self.df_powerbi is not None,
-            self.df_novedades_max_2 is not None
-        ])
-        
-        print(f"\n📊 Archivos cargados: {cargados}/7")
-        return cargados >= 4
-    
-    # ============================================================
-    # CONSTRUIR MAPA DE NOMBRES
-    # ============================================================
+    def normalizar_nombre(self, nombre):
+        if not isinstance(nombre, str):
+            return nombre
+        nombre_limpio = limpiar_nombre(nombre.strip())
+        if not nombre_limpio:
+            return nombre_limpio
+        if nombre_limpio in self.mapa_nombres:
+            return self.mapa_nombres[nombre_limpio]
+        if nombre.strip() in self.mapa_nombres:
+            return self.mapa_nombres[nombre.strip()]
+        for nombre_plat, nombre_canon in self.mapa_nombres.items():
+            if (nombre_limpio.lower() in nombre_plat.lower() or 
+                nombre_plat.lower() in nombre_limpio.lower()):
+                return nombre_canon
+        return nombre_limpio
     
     def construir_mapa_nombres(self):
-        print("\n" + "="*70)
-        print("🔄 CONSTRUYENDO MAPA DE NOMBRES")
-        print("="*70)
-        
         if self.df_powerbi is None:
-            print("⚠️ No hay datos de Power BI")
             return False
         
-        cols = COLUMNAS_MAPEO['powerbi']['columnas']
+        cols = COLUMNAS_POWERBI
         col_canonico = cols.get('nombre', 'NAME CORRECT')
         col_cl = cols.get('nombre_cl', 'NAME CL')
         col_sb = cols.get('nombre_sb', 'NAME SB')
@@ -502,37 +397,11 @@ class ReporteTiemposSystem:
             if tiene_cl or tiene_sb or tiene_tg:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
         
-        print(f"   ✅ Usuarios a incluir: {len(self.usuarios_con_plataforma)}")
         return True
     
-    def normalizar_nombre(self, nombre):
-        if not isinstance(nombre, str):
-            return nombre
-        nombre_limpio = limpiar_nombre(nombre.strip())
-        if not nombre_limpio:
-            return nombre_limpio
-        if nombre_limpio in self.mapa_nombres:
-            return self.mapa_nombres[nombre_limpio]
-        if nombre.strip() in self.mapa_nombres:
-            return self.mapa_nombres[nombre.strip()]
-        for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            if (nombre_limpio.lower() in nombre_plat.lower() or 
-                nombre_plat.lower() in nombre_limpio.lower()):
-                return nombre_canon
-        return nombre_limpio
-    
-    # ============================================================
-    # PROCESAR NOVEDADES
-    # ============================================================
-    
     def procesar_novedades(self):
-        print("\n" + "="*70)
-        print("📋 PROCESANDO NOVEDADES")
-        print("="*70)
-        
         novedades_list = []
         
-        # Procesar Novedades MAX (rango de fechas)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -545,29 +414,22 @@ class ReporteTiemposSystem:
                 else:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ MAX: {len(df_max_validos)} registros")
         
-        # Procesar Novedades MAX 2 (fecha específica) - IMPORTANTE: extraer usuarios
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
-                # Filtrar por el rango de fechas del reporte
                 df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_max2_filtrado = df_max2[
                     (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
                     (df_max2['Fecha_Conv'] <= self.fecha_fin)
                 ]
                 
-                # Extraer usuarios de Novedades 2
                 for _, row in df_max2_filtrado.iterrows():
                     nombre = row['Persona']
                     nombre_normalizado = self.normalizar_nombre(nombre)
                     if nombre_normalizado:
                         self.usuarios_novedades_2.add(nombre_normalizado)
                 
-                print(f"   ✅ Usuarios en Novedades 2 en el rango: {len(self.usuarios_novedades_2)}")
-                
-                # Procesar como novedad regular también
                 df_max2_validos = df_max2_filtrado[df_max2_filtrado['Fecha_Conv'].notna()]
                 if 'Tipo de Novedad' in df_max2.columns:
                     df_max2_validos['Tipo'] = df_max2_validos['Tipo de Novedad']
@@ -577,11 +439,7 @@ class ReporteTiemposSystem:
                 df_max2_validos['Fecha_Fin'] = df_max2_validos['Fecha_Conv']
                 df_max2_validos['Usuario_Normalizado'] = df_max2_validos['Persona'].apply(self.normalizar_nombre)
                 novedades_list.append(df_max2_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ MAX 2: {len(df_max2_validos)} registros en el rango")
-            else:
-                print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
-        # Procesar Novedades CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -594,19 +452,11 @@ class ReporteTiemposSystem:
                 else:
                     df_clg_validos['Tipo'] = 'Permiso CLG'
                 novedades_list.append(df_clg_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ CLG: {len(df_clg_validos)} registros")
         
         if novedades_list:
             self.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
-            print(f"   ✅ Total novedades combinadas: {len(self.df_novedades_combinadas)}")
         else:
             self.df_novedades_combinadas = None
-        
-        # Mostrar usuarios de Novedades 2
-        if self.usuarios_novedades_2:
-            print(f"\n   📋 Usuarios en Novedades 2:")
-            for usuario in sorted(self.usuarios_novedades_2):
-                print(f"      • {usuario}")
         
         return True
     
@@ -621,19 +471,11 @@ class ReporteTiemposSystem:
                 return row['Tipo']
         return None
     
-    def verificar_novedad_2(self, usuario):
-        """Verifica si el usuario aparece en Novedades 2 en el rango de fechas"""
-        return usuario in self.usuarios_novedades_2
-    
-    # ============================================================
-    # PROCESAR PLATAFORMA CON RANGO DE FECHAS Y DETALLE DIARIO
-    # ============================================================
-    
     def procesar_plataforma(self, df, config_key):
         if df is None:
             return None
         
-        config = COLUMNAS_MAPEO[config_key]
+        config = COLUMNAS_PLATAFORMAS[config_key]
         cols = config['columnas']
         formato_horas = config.get('formato_horas', 'auto')
         formato_fecha = config.get('formato_fecha', '%m/%d/%Y')
@@ -655,7 +497,6 @@ class ReporteTiemposSystem:
         except:
             df_proc['Date'] = self.fecha_inicio
         
-        # Filtrar por RANGO de fechas
         df_proc = df_proc[
             (df_proc['Date'] >= self.fecha_inicio) & 
             (df_proc['Date'] <= self.fecha_fin)
@@ -669,19 +510,16 @@ class ReporteTiemposSystem:
         else:
             df_proc['Actividad'] = 'Sin actividad'
         
-        # Agrupar por usuario (total del rango)
         df_agrupado = df_proc.groupby('Usuario_Normalizado').agg({
             'Horas': 'sum',
             'Actividad': lambda x: ', '.join(x.unique()[:3])
         }).reset_index()
         
-        # Agregar conteo de días con actividad
         df_dias = df_proc.groupby('Usuario_Normalizado')['Date'].nunique().reset_index()
         df_dias.columns = ['Usuario_Normalizado', 'Dias_Activos']
         df_agrupado = df_agrupado.merge(df_dias, on='Usuario_Normalizado', how='left')
         df_agrupado['Dias_Activos'] = df_agrupado['Dias_Activos'].fillna(0).astype(int)
         
-        # Detalle diario
         df_diario = df_proc.groupby(['Usuario_Normalizado', 'Date']).agg({
             'Horas': 'sum'
         }).reset_index()
@@ -694,36 +532,19 @@ class ReporteTiemposSystem:
         
         return df_agrupado
     
-    # ============================================================
-    # CONSOLIDAR
-    # ============================================================
-    
-    def consolidar_todas_plataformas(self):
-        print("\n" + "="*70)
-        print("🔄 CONSOLIDANDO DATOS")
-        print("="*70)
-        print(f"📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
-        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
-        print(f"📋 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}")
-        print("-"*70)
+    def consolidar(self):
+        if not self.usuarios_novedades_2:
+            self.df_analisis = pd.DataFrame()
+            return True
         
         df_camp = self.procesar_plataforma(self.df_camp, 'camp_legal')
         df_sb = self.procesar_plataforma(self.df_smokeball, 'smokeball')
         df_tg = self.procesar_plataforma(self.df_toggl, 'toggl')
         
-        # Obtener días con jornada (solo días con jornada > 0)
         dias_con_jornada = self._obtener_dias_con_jornada()
         dias_columnas = [f'Dia_{fecha.strftime("%d/%m")}' for fecha, _ in dias_con_jornada]
         
-        # Crear diccionario con todos los usuarios de Novedades 2
         usuarios_dict = {}
-        
-        # Solo incluir usuarios que están en Novedades 2
-        if not self.usuarios_novedades_2:
-            print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
-            self.df_analisis = pd.DataFrame()
-            return True
-        
         for usuario in self.usuarios_novedades_2:
             usuarios_dict[usuario] = {
                 'Camp Legal': 0.0,
@@ -757,7 +578,6 @@ class ReporteTiemposSystem:
         procesar_plataforma_detalle(df_sb, 'Smokeball')
         procesar_plataforma_detalle(df_tg, 'Toggl')
         
-        print("   🔍 Verificando permisos...")
         for usuario in usuarios_dict:
             fecha_actual = self.fecha_inicio
             while fecha_actual <= self.fecha_fin:
@@ -770,22 +590,18 @@ class ReporteTiemposSystem:
         datos = []
         for usuario, data in usuarios_dict.items():
             total = data['Camp Legal'] + data['Smokeball'] + data['Toggl']
-            
-            # Calcular porcentaje sobre jornada total esperada
             porcentaje = (total / self.jornada_total_esperada * 100) if self.jornada_total_esperada > 0 else 0
             
-            # Determinar estado
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
-                estado = self.calcular_estado_rango(total, data['Camp Legal'], data['Smokeball'], data['Toggl'], porcentaje)
+                estado = self.calcular_estado(total, data['Camp Legal'], data['Smokeball'], data['Toggl'], porcentaje)
             
-            # Construir detalle diario
             detalle_items = []
             for dia, horas in data['Detalle_Diario'].items():
                 if horas > 0:
                     jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
-                    detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h)")
+                    detalle_items.append(f"{dia}: {horas:.1f}h")
             detalle_str = ' | '.join(detalle_items)
             
             datos.append({
@@ -805,11 +621,9 @@ class ReporteTiemposSystem:
             })
         
         self.df_analisis = pd.DataFrame(datos)
-        
-        print(f"\n✅ Usuarios en reporte: {len(self.df_analisis)}")
         return True
     
-    def calcular_estado_rango(self, total, camp, sb, tg, porcentaje):
+    def calcular_estado(self, total, camp, sb, tg, porcentaje):
         if total == 0:
             return "⛔ Sin registro"
         
@@ -835,630 +649,459 @@ class ReporteTiemposSystem:
             else:
                 return f"❌ Insuficiente ({porcentaje:.0f}%)"
     
-    # ============================================================
-    # GENERAR HTML CON DESGLOSE DIARIO
-    # ============================================================
+    def obtener_resultados(self):
+        return self.df_analisis
     
-    def generar_html_reporte(self):
+    def get_estadisticas(self):
         if self.df_analisis is None or self.df_analisis.empty:
-            return self._generar_html_vacio()
+            return {
+                'total_usuarios': 0,
+                'total_horas': 0,
+                'promedio': 0,
+                'con_permiso': 0,
+                'horas_camp': 0,
+                'horas_sb': 0,
+                'horas_tg': 0
+            }
         
         df = self.df_analisis
-        fecha_inicio_str = self.fecha_inicio.strftime('%d/%m/%Y')
-        fecha_fin_str = self.fecha_fin.strftime('%d/%m/%Y')
-        
-        total_usuarios = len(df)
-        total_horas = df['Total_Horas'].sum()
-        promedio = df['Total_Horas'].mean()
-        con_permiso = len(df[df['Permiso'] != 'Sin permiso'])
-        
-        horas_camp = df['Camp Legal'].sum()
-        horas_sb = df['Smokeball'].sum()
-        horas_tg = df['Toggl'].sum()
-        
-        # Generar tarjetas con detalle diario
-        tarjetas_html = ""
-        df_ordenado = df.sort_values('Porcentaje', ascending=True)
-        
-        for _, row in df_ordenado.iterrows():
-            if row['Estado'].startswith('✅'):
-                bg_color = '#eafaf1'
-                icono = '✅'
-            elif row['Estado'].startswith('⚠️'):
-                bg_color = '#fef9e7'
-                icono = '⚠️'
-            elif row['Estado'].startswith('❌'):
-                bg_color = '#fdedec'
-                icono = '❌'
-            elif row['Estado'].startswith('⛔'):
-                bg_color = '#f4f6f7'
-                icono = '⛔'
-            elif row['Estado'].startswith('📋'):
-                bg_color = '#f4ecf7'
-                icono = '📋'
-            else:
-                bg_color = '#f8f9fa'
-                icono = '📊'
-            
-            tags = []
-            if row['Camp Legal'] > 0:
-                tags.append('<span class="tag tag-cl">CL</span>')
-            if row['Smokeball'] > 0:
-                tags.append('<span class="tag tag-sb">SB</span>')
-            if row['Toggl'] > 0:
-                tags.append('<span class="tag tag-tg">TG</span>')
-            if row['Permiso'] != 'Sin permiso':
-                tags.append('<span class="tag tag-permiso">🔒</span>')
-            if row['Novedad_2'] == 'Sí':
-                tags.append('<span class="tag tag-novedad">📋</span>')
-            if not tags:
-                tags.append('<span class="tag tag-sin">—</span>')
-            
-            horas_detalle = []
-            if row['Camp Legal'] > 0:
-                horas_detalle.append(f'CL {row["Camp Legal"]:.1f}h')
-            if row['Smokeball'] > 0:
-                horas_detalle.append(f'SB {row["Smokeball"]:.1f}h')
-            if row['Toggl'] > 0:
-                horas_detalle.append(f'TG {row["Toggl"]:.1f}h')
-            horas_detalle_str = ' · '.join(horas_detalle) if horas_detalle else 'Sin registro'
-            
-            # Detalle diario
-            detalle_diario_html = ""
-            if row['Detalle_Diario']:
-                items = row['Detalle_Diario'].split(' | ')
-                for item in items:
-                    # Extraer hora y esperado del formato: "Dia: X.Xh (esperado Yh)"
-                    match = re.search(r'(\d{2}/\d{2}): (\d+\.?\d*)h \(esperado (\d+)h\)', item)
-                    if match:
-                        dia, horas_str, esperado = match.groups()
-                        horas_float = float(horas_str)
-                        esperado_int = int(esperado)
-                        # Color según cumplimiento de la jornada esperada para ese día
-                        if horas_float >= esperado_int:
-                            color = '#27ae60'
-                        elif horas_float >= esperado_int * 0.5:
-                            color = '#f39c12'
-                        elif horas_float > 0:
-                            color = '#e74c3c'
-                        else:
-                            color = '#bdc3c7'
-                        detalle_diario_html += f'<span class="dia-item" style="background:{color};">{dia} {horas_float:.1f}h</span>'
-            
-            dias_info = f'📅 {row["Dias_Activos"]} días activos'
-            jornada_text = f'Jornada: {self.jornada_total_esperada:.0f}h'
-            
-            tarjetas_html += f"""
-                <div class="card" style="background: {bg_color};">
-                    <div class="card-header">
-                        <div class="card-nombre">
-                            <span class="card-icono">{icono}</span>
-                            {row['Usuario']}
-                        </div>
-                        <div class="card-tags">{' '.join(tags)}</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="card-horas">
-                            <span class="total">{row['Total_Horas']:.1f}h</span>
-                            <span class="detalle">{horas_detalle_str}</span>
-                        </div>
-                        <div class="card-estado">
-                            <span class="estado-text">{row['Estado']}</span>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <span class="dias-info">{dias_info}</span>
-                        <span class="porcentaje-info">{row['Porcentaje']:.0f}% · {jornada_text}</span>
-                    </div>
-                    {f'<div class="card-detalle">{detalle_diario_html}</div>' if detalle_diario_html else ''}
-                </div>
-            """
-        
-        return f"""
-        <!DOCTYPE html>
-        <html lang="es">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Reporte Tiempos - {fecha_inicio_str}</title>
-            <style>
-                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                body {{
-                    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-                    background: #eef2f7;
-                    padding: 20px;
-                    color: #1a2332;
-                }}
-                .container {{ max-width: 1400px; margin: 0 auto; }}
-                
-                .header {{
-                    background: linear-gradient(135deg, #1a3a5c 0%, #2c5f8a 100%);
-                    color: white;
-                    padding: 18px 25px;
-                    border-radius: 12px;
-                    margin-bottom: 18px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    flex-wrap: wrap;
-                    gap: 12px;
-                }}
-                .header h1 {{
-                    font-size: 20px;
-                    font-weight: 700;
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }}
-                .header h1 span {{
-                    background: rgba(255,255,255,0.2);
-                    padding: 1px 12px;
-                    border-radius: 20px;
-                    font-size: 13px;
-                }}
-                .header .fecha {{
-                    font-size: 14px;
-                    font-weight: 600;
-                    opacity: 0.9;
-                }}
-                .header .rango {{
-                    font-size: 13px;
-                    opacity: 0.75;
-                    margin-top: 2px;
-                }}
-                .header .info {{
-                    font-size: 12px;
-                    opacity: 0.8;
-                    margin-top: 2px;
-                }}
-                
-                .kpi-row {{
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 12px;
-                    margin-bottom: 18px;
-                }}
-                .kpi {{
-                    background: white;
-                    padding: 14px 18px;
-                    border-radius: 10px;
-                    text-align: center;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-                }}
-                .kpi .num {{ font-size: 28px; font-weight: 800; }}
-                .kpi .label {{ font-size: 10px; text-transform: uppercase; color: #7a8a9e; font-weight: 600; letter-spacing: 0.3px; }}
-                .kpi .sub {{ font-size: 11px; color: #95a5a6; margin-top: 2px; }}
-                .kpi.blue .num {{ color: #2c5f8a; }}
-                .kpi.purple .num {{ color: #8e44ad; }}
-                .kpi.green .num {{ color: #27ae60; }}
-                .kpi.orange .num {{ color: #e67e22; }}
-                
-                .plat-row {{
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 12px;
-                    margin-bottom: 18px;
-                }}
-                .plat {{
-                    background: white;
-                    padding: 10px 16px;
-                    border-radius: 10px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-                }}
-                .plat .name {{ font-weight: 600; font-size: 13px; }}
-                .plat .horas {{ font-size: 20px; font-weight: 800; }}
-                .plat.cl .name {{ color: #2471a3; }}
-                .plat.cl .horas {{ color: #2471a3; }}
-                .plat.sb .name {{ color: #1e8449; }}
-                .plat.sb .horas {{ color: #1e8449; }}
-                .plat.tg .name {{ color: #ca6f1e; }}
-                .plat.tg .horas {{ color: #ca6f1e; }}
-                
-                .cards-grid {{
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-                    gap: 12px;
-                }}
-                
-                .card {{
-                    border-radius: 12px;
-                    padding: 14px 18px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-                    transition: transform 0.15s, box-shadow 0.15s;
-                }}
-                .card:hover {{
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-                }}
-                
-                .card-header {{
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 8px;
-                    flex-wrap: wrap;
-                    gap: 4px;
-                }}
-                .card-nombre {{
-                    font-size: 14px;
-                    font-weight: 700;
-                    color: #1a2332;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }}
-                .card-icono {{ font-size: 16px; }}
-                .card-tags {{ display: flex; gap: 4px; flex-wrap: wrap; }}
-                
-                .tag {{
-                    display: inline-block;
-                    padding: 1px 10px;
-                    border-radius: 12px;
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: white;
-                    letter-spacing: 0.5px;
-                }}
-                .tag-cl {{ background: #3498db; }}
-                .tag-sb {{ background: #2ecc71; }}
-                .tag-tg {{ background: #e67e22; }}
-                .tag-permiso {{ background: #8e44ad; }}
-                .tag-novedad {{ background: #e74c3c; }}
-                .tag-sin {{ background: #bdc3c7; color: #2c3e50; }}
-                
-                .card-body {{
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    flex-wrap: wrap;
-                    gap: 6px;
-                    margin-bottom: 6px;
-                }}
-                .card-horas {{
-                    display: flex;
-                    align-items: baseline;
-                    gap: 8px;
-                    flex-wrap: wrap;
-                }}
-                .card-horas .total {{ font-size: 20px; font-weight: 800; color: #1a2332; }}
-                .card-horas .detalle {{ font-size: 11px; color: #5a6a7e; font-weight: 500; }}
-                .card-estado {{
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    flex-wrap: wrap;
-                }}
-                .estado-text {{ font-size: 12px; font-weight: 600; }}
-                .permiso-badge {{
-                    background: #8e44ad;
-                    color: white;
-                    padding: 1px 10px;
-                    border-radius: 12px;
-                    font-size: 10px;
-                    font-weight: 700;
-                }}
-                
-                .card-footer {{
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding-top: 6px;
-                    border-top: 1px solid rgba(0,0,0,0.05);
-                    font-size: 11px;
-                    color: #7a8a9e;
-                }}
-                .dias-info {{ font-weight: 600; }}
-                .porcentaje-info {{ font-weight: 600; color: #2c5f8a; }}
-                
-                .card-detalle {{
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 4px;
-                    margin-top: 8px;
-                    padding-top: 8px;
-                    border-top: 1px solid rgba(0,0,0,0.05);
-                }}
-                .dia-item {{
-                    display: inline-block;
-                    padding: 1px 8px;
-                    border-radius: 10px;
-                    font-size: 10px;
-                    font-weight: 600;
-                    color: white;
-                }}
-                
-                .leyenda-calidad {{
-                    background: white;
-                    padding: 10px 16px;
-                    border-radius: 10px;
-                    margin-top: 15px;
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 15px;
-                    font-size: 11px;
-                    align-items: center;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-                }}
-                .leyenda-calidad .item {{
-                    display: flex;
-                    align-items: center;
-                    gap: 5px;
-                }}
-                .leyenda-calidad .color {{
-                    display: inline-block;
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 4px;
-                }}
-                
-                .info-novedades {{
-                    background: #fef9e7;
-                    border: 1px solid #f9e79f;
-                    padding: 10px 16px;
-                    border-radius: 10px;
-                    margin-bottom: 15px;
-                    font-size: 12px;
-                    color: #7d6608;
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 15px;
-                    align-items: center;
-                }}
-                .info-novedades strong {{
-                    color: #5a3e0a;
-                }}
-                
-                @media (max-width: 768px) {{
-                    body {{ padding: 10px; }}
-                    .header {{ flex-direction: column; text-align: center; padding: 14px 16px; }}
-                    .header h1 {{ font-size: 17px; justify-content: center; }}
-                    .kpi-row {{ grid-template-columns: repeat(2, 1fr); gap: 8px; }}
-                    .plat-row {{ grid-template-columns: 1fr; }}
-                    .cards-grid {{ grid-template-columns: 1fr; }}
-                    .card {{ padding: 12px 14px; }}
-                    .kpi .num {{ font-size: 22px; }}
-                }}
-                @media (max-width: 480px) {{
-                    .kpi-row {{ grid-template-columns: 1fr 1fr; }}
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                
-                <div class="header">
-                    <div>
-                        <h1>
-                            📊 Reporte de Tiempos
-                            <span>{total_usuarios}</span>
-                        </h1>
-                        <div class="rango">📅 {fecha_inicio_str} - {fecha_fin_str}</div>
-                        <div class="info">📋 Jornada total: {self.jornada_total_esperada:.0f}h · Sábados: 4h · Festivos: 0h</div>
-                    </div>
-                    <div class="fecha">👥 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}</div>
-                </div>
-                
-                <div class="info-novedades">
-                    <span>📋 <strong>Usuarios en Novedades 2:</strong> {len(self.usuarios_novedades_2)} personas deben marcar tiempo</span>
-                    <span>⛔ <strong>Usuarios NO en Novedades 2:</strong> Están descansando y no aparecen en el reporte</span>
-                </div>
-                
-                <div class="kpi-row">
-                    <div class="kpi blue">
-                        <div class="num">{total_usuarios}</div>
-                        <div class="label">👥 Usuarios</div>
-                        <div class="sub">con turno</div>
-                    </div>
-                    <div class="kpi purple">
-                        <div class="num">{con_permiso}</div>
-                        <div class="label">📋 Permiso</div>
-                    </div>
-                    <div class="kpi green">
-                        <div class="num">{total_horas:.1f}h</div>
-                        <div class="label">⏱️ Total Horas</div>
-                    </div>
-                    <div class="kpi orange">
-                        <div class="num">{promedio:.1f}h</div>
-                        <div class="label">📊 Promedio</div>
-                    </div>
-                </div>
-                
-                <div class="plat-row">
-                    <div class="plat cl">
-                        <span class="name">🏛️ Camp Legal</span>
-                        <span class="horas">{horas_camp:.1f}h</span>
-                    </div>
-                    <div class="plat sb">
-                        <span class="name">📋 Smokeball</span>
-                        <span class="horas">{horas_sb:.1f}h</span>
-                    </div>
-                    <div class="plat tg">
-                        <span class="name">⏱️ Toggl</span>
-                        <span class="horas">{horas_tg:.1f}h</span>
-                    </div>
-                </div>
-                
-                <div class="cards-grid">
-                    {tarjetas_html}
-                </div>
-                
-                <div class="leyenda-calidad">
-                    <span style="font-weight:600; color:#1a2332;">📊 Control de Calidad - Desglose Diario:</span>
-                    <span class="item"><span class="color" style="background:#27ae60;"></span> ≥ Jornada (Completo)</span>
-                    <span class="item"><span class="color" style="background:#f39c12;"></span> 50-100% (Parcial)</span>
-                    <span class="item"><span class="color" style="background:#e74c3c;"></span> 1-50% (Bajo)</span>
-                    <span class="item"><span class="color" style="background:#bdc3c7;"></span> 0h (Sin registro)</span>
-                    <span style="color:#7a8a9e; font-size:10px; margin-left:auto;">📋 Novedad 2 = Debe marcar tiempo</span>
-                </div>
-                
-            </div>
-        </body>
-        </html>
-        """
-    
-    def _generar_html_vacio(self):
-        fecha_inicio_str = self.fecha_inicio.strftime('%d/%m/%Y')
-        fecha_fin_str = self.fecha_fin.strftime('%d/%m/%Y')
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte Tiempos - {fecha_inicio_str}</title>
-            <style>
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #eef2f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }}
-                .empty {{ background: white; padding: 40px 50px; border-radius: 16px; text-align: center; max-width: 500px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }}
-                .empty .icon {{ font-size: 56px; }}
-                .empty h1 {{ color: #1a3a5c; font-size: 24px; margin: 12px 0; }}
-                .empty p {{ color: #7a8a9e; font-size: 16px; }}
-                .empty .fecha {{ color: #2c5f8a; font-weight: 600; font-size: 16px; margin-top: 10px; }}
-                .empty .info {{ color: #7a8a9e; font-size: 14px; margin-top: 10px; }}
-            </style>
-        </head>
-        <body>
-            <div class="empty">
-                <div class="icon">📋</div>
-                <h1>No hay usuarios con turno</h1>
-                <p>No hay personas registradas en <strong>Novedades 2</strong> para este rango de fechas.</p>
-                <div class="fecha">📅 {fecha_inicio_str} - {fecha_fin_str}</div>
-                <div class="info">💡 Los usuarios que no aparecen en Novedades 2 están descansando.</div>
-            </div>
-        </body>
-        </html>
-        """
-    
-    # ============================================================
-    # EJECUTAR
-    # ============================================================
-    
-    def ejecutar(self):
-        print("="*70)
-        print("📊 SISTEMA DE REPORTE DE TIEMPOS v33.0")
-        print("📌 FILTRO POR NOVEDADES 2 (SOLO QUIENES TRABAJAN)")
-        print("="*70)
-        print(f"📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
-        print("="*70)
-        
-        if not self.leer_archivos():
-            print("❌ Error al leer archivos")
-            return False
-        
-        if not self.construir_mapa_nombres():
-            print("❌ Error al construir mapa de nombres")
-            return False
-        
-        self.procesar_novedades()
-        
-        # Verificar si hay usuarios en Novedades 2
-        if not self.usuarios_novedades_2:
-            print("\n⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
-            print("📋 Esto significa que todos los usuarios están descansando en este rango.")
-        
-        if not self.consolidar_todas_plataformas():
-            print("❌ Error al consolidar datos")
-            return False
-        
-        html_body = self.generar_html_reporte()
-        
-        preview_dir = os.path.join(self.ruta_base, "reporte_previews")
-        os.makedirs(preview_dir, exist_ok=True)
-        
-        filename = os.path.join(preview_dir, f"reporte_novedades2_{self.fecha_inicio_str}_{self.fecha_fin_str}.html")
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(html_body)
-        
-        print(f"\n📄 Reporte guardado: {filename}")
-        
-        import webbrowser
-        webbrowser.open(filename)
-        print("   🌐 Reporte abierto en el navegador")
-        
-        return True
-
+        return {
+            'total_usuarios': len(df),
+            'total_horas': df['Total_Horas'].sum(),
+            'promedio': df['Total_Horas'].mean(),
+            'con_permiso': len(df[df['Permiso'] != 'Sin permiso']),
+            'horas_camp': df['Camp Legal'].sum(),
+            'horas_sb': df['Smokeball'].sum(),
+            'horas_tg': df['Toggl'].sum()
+        }
 
 # ============================================================
-# SELECCIONAR RANGO DE FECHAS
+# CONFIGURACIÓN DE COLUMNAS
 # ============================================================
 
-def seleccionar_rango_fechas():
-    print("\n" + "="*70)
-    print("📅 SELECCIÓN DE RANGO DE FECHAS")
-    print("="*70)
-    print("📌 NOTA: Las fechas en los archivos están en formato MM/DD/YYYY")
-    print()
-    
-    hoy = datetime.now().date()
-    
-    print("Opciones disponibles:")
-    print("  1. Ayer (un día)")
-    print("  2. Semana actual (Lunes - Hoy)")
-    print("  3. Semana pasada (Lunes - Domingo)")
-    print("  4. Mes actual (1er día - Hoy)")
-    print("  5. Rango personalizado")
-    print()
-    
-    opcion = input("Selecciona (1-5): ")
-    
-    if opcion == "1":
-        fecha_fin = hoy - timedelta(days=1)
-        fecha_inicio = fecha_fin
-    
-    elif opcion == "2":
-        dias_desde_lunes = hoy.weekday()
-        fecha_inicio = hoy - timedelta(days=dias_desde_lunes)
-        fecha_fin = hoy
-    
-    elif opcion == "3":
-        dias_desde_lunes = hoy.weekday()
-        lunes_actual = hoy - timedelta(days=dias_desde_lunes)
-        fecha_inicio = lunes_actual - timedelta(days=7)
-        fecha_fin = fecha_inicio + timedelta(days=6)
-    
-    elif opcion == "4":
-        fecha_inicio = hoy.replace(day=1)
-        fecha_fin = hoy
-    
-    elif opcion == "5":
-        fecha_inicio_str = input("Fecha inicio (MM/DD/YYYY): ")
-        fecha_fin_str = input("Fecha fin (MM/DD/YYYY): ")
-        try:
-            fecha_inicio = datetime.strptime(fecha_inicio_str, "%m/%d/%Y").date()
-            fecha_fin = datetime.strptime(fecha_fin_str, "%m/%d/%Y").date()
-            if fecha_inicio > fecha_fin:
-                fecha_inicio, fecha_fin = fecha_fin, fecha_inicio
-        except:
-            print("❌ Formato incorrecto. Usando fecha de ayer.")
-            fecha_fin = hoy - timedelta(days=1)
-            fecha_inicio = fecha_fin
-    
-    else:
-        print("❌ Opción no válida. Usando fecha de ayer.")
-        fecha_fin = hoy - timedelta(days=1)
-        fecha_inicio = fecha_fin
-    
-    print(f"\n✅ Rango seleccionado: {fecha_inicio.strftime('%d/%m/%Y')} - {fecha_fin.strftime('%d/%m/%Y')}")
-    return fecha_inicio, fecha_fin
+COLUMNAS_PLATAFORMAS = {
+    'camp_legal': {
+        'columnas': {
+            'nombre': 'Staff Name',
+            'horas': 'Hours Spent',
+            'fecha': 'Time Entry Date',
+            'actividad': 'Activity'
+        },
+        'formato_horas': 'tiempo',
+        'formato_fecha': '%m/%d/%Y'
+    },
+    'smokeball': {
+        'columnas': {
+            'nombre': 'Name',
+            'horas': 'Hours',
+            'fecha': 'Date',
+            'actividad': 'Subject'
+        },
+        'formato_horas': 'decimal',
+        'formato_fecha': '%m/%d/%Y'
+    },
+    'toggl': {
+        'columnas': {
+            'nombre': 'Member',
+            'horas': 'Dur',
+            'fecha': 'Date1',
+            'actividad': 'Project'
+        },
+        'formato_horas': 'tiempo',
+        'formato_fecha': '%m/%d/%Y'
+    }
+}
 
+COLUMNAS_POWERBI = {
+    'nombre': 'NAME CORRECT',
+    'nombre_cl': 'NAME CL',
+    'nombre_sb': 'NAME SB',
+    'nombre_tg': 'NAME TG',
+    'status': 'USER STATUS'
+}
 
 # ============================================================
-# MAIN
+# INTERFAZ PRINCIPAL
 # ============================================================
 
 def main():
-    try:
-        fecha_inicio, fecha_fin = seleccionar_rango_fechas()
-        sistema = ReporteTiemposSystem(fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
-        sistema.ejecutar()
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>📊 Reporte de Tiempos</h1>
+        <p>Análisis de tiempos por plataforma · Control de calidad · Novedades 2</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    print("\n" + "="*70)
-    input("Presiona Enter para salir...")
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ Configuración")
+        
+        st.subheader("📅 Rango de fechas")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.date_input(
+                "Fecha inicio",
+                value=datetime.now().date() - timedelta(days=7),
+                format="MM/DD/YYYY"
+            )
+        with col2:
+            fecha_fin = st.date_input(
+                "Fecha fin",
+                value=datetime.now().date() - timedelta(days=1),
+                format="MM/DD/YYYY"
+            )
+        
+        st.divider()
+        st.subheader("⚡ Acceso rápido")
+        
+        if st.button("📅 Ayer", use_container_width=True):
+            fecha_inicio = datetime.now().date() - timedelta(days=1)
+            fecha_fin = fecha_inicio
+            st.rerun()
+        
+        if st.button("📅 Semana actual", use_container_width=True):
+            hoy = datetime.now().date()
+            dias_desde_lunes = hoy.weekday()
+            fecha_inicio = hoy - timedelta(days=dias_desde_lunes)
+            fecha_fin = hoy
+            st.rerun()
+        
+        if st.button("📅 Mes actual", use_container_width=True):
+            hoy = datetime.now().date()
+            fecha_inicio = hoy.replace(day=1)
+            fecha_fin = hoy
+            st.rerun()
+        
+        st.divider()
+        st.subheader("📁 Archivos")
+        
+        uploaded_files = {}
+        
+        with st.expander("📊 Power BI Resources", expanded=False):
+            uploaded_files['powerbi'] = st.file_uploader(
+                "Power BI resources.xlsx",
+                type=['xlsx'],
+                key="powerbi",
+                label_visibility="collapsed"
+            )
+        
+        with st.expander("🏛️ Camp Legal", expanded=False):
+            uploaded_files['camp_legal'] = st.file_uploader(
+                "Reporte Diario Camp Legal.xlsx",
+                type=['xlsx'],
+                key="camp_legal",
+                label_visibility="collapsed"
+            )
+        
+        with st.expander("📋 Smokeball", expanded=False):
+            uploaded_files['smokeball'] = st.file_uploader(
+                "Reporte_general.xlsx",
+                type=['xlsx'],
+                key="smokeball",
+                label_visibility="collapsed"
+            )
+        
+        with st.expander("⏱️ Toggl", expanded=False):
+            uploaded_files['toggl'] = st.file_uploader(
+                "Revision de entradas de tiempo - Toggl.xlsx",
+                type=['xlsx'],
+                key="toggl",
+                label_visibility="collapsed"
+            )
+        
+        with st.expander("📋 Novedades", expanded=False):
+            uploaded_files['novedades_max'] = st.file_uploader(
+                "Template_Novedades_RRHH_MAX 1 1 2.xlsx (Novedades)",
+                type=['xlsx'],
+                key="novedades_max",
+                label_visibility="collapsed"
+            )
+            uploaded_files['novedades_max_2'] = st.file_uploader(
+                "Template_Novedades_RRHH_MAX 1 1 2.xlsx (Novedades 2)",
+                type=['xlsx'],
+                key="novedades_max_2",
+                label_visibility="collapsed"
+            )
+            uploaded_files['novedades_clg'] = st.file_uploader(
+                "Template_Novedades_RRHH_CLG - last.xlsx",
+                type=['xlsx'],
+                key="novedades_clg",
+                label_visibility="collapsed"
+            )
+        
+        st.divider()
+        
+        archivos_cargados = sum([1 for v in uploaded_files.values() if v is not None])
+        
+        st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/7")
+        
+        procesar = st.button(
+            "🚀 Generar Reporte",
+            type="primary",
+            use_container_width=True,
+            disabled=archivos_cargados < 4
+        )
+    
+    # Área principal
+    if not procesar:
+        st.info("👈 Sube los archivos requeridos en la barra lateral y presiona 'Generar Reporte'")
+        
+        st.markdown("### 📋 Archivos requeridos")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("""
+            **Obligatorios:**
+            - ✅ Power BI Resources
+            - ✅ Camp Legal
+            - ✅ Smokeball
+            - ✅ Toggl
+            - ✅ Novedades MAX (Novedades 2)
+            """)
+        with col2:
+            st.markdown("""
+            **Opcionales:**
+            - Novedades MAX (Novedades)
+            - Novedades CLG
+            """)
+        with col3:
+            st.markdown("""
+            **📌 Nota:**
+            - El reporte solo muestra usuarios en Novedades 2
+            - Sábados: 4h · Festivos: 0h
+            """)
+        
+        st.markdown("---")
+        st.markdown("### 💡 Ejemplo de uso")
+        st.code("""
+        1. Sube los 4 archivos obligatorios
+        2. Selecciona el rango de fechas
+        3. Presiona "Generar Reporte"
+        4. Visualiza los resultados
+        """, language="text")
+        
+        return
+    
+    # Procesar reporte
+    with st.spinner("🔄 Procesando datos... Por favor espera"):
+        try:
+            # Inicializar procesador
+            procesador = ProcesadorReporte(fecha_inicio, fecha_fin)
+            
+            # Cargar archivos
+            for key, file in uploaded_files.items():
+                if file is not None:
+                    procesador.cargar_archivo(file, key)
+            
+            # Construir mapa de nombres
+            if not procesador.construir_mapa_nombres():
+                st.error("❌ Error al construir mapa de nombres. Verifica el archivo Power BI Resources.")
+                st.stop()
+            
+            # Procesar novedades
+            procesador.procesar_novedades()
+            
+            # Verificar usuarios en Novedades 2
+            if not procesador.usuarios_novedades_2:
+                st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
+                st.info("💡 Todos los usuarios están descansando en este período.")
+                st.stop()
+            
+            # Consolidar resultados
+            if not procesador.consolidar():
+                st.error("❌ Error al consolidar datos.")
+                st.stop()
+            
+            # Obtener resultados
+            df_resultados = procesador.obtener_resultados()
+            estadisticas = procesador.get_estadisticas()
+            
+            if df_resultados is None or df_resultados.empty:
+                st.warning("⚠️ No se encontraron resultados para el rango seleccionado.")
+                st.stop()
+            
+            # Mostrar resultados
+            st.markdown("---")
+            st.markdown("### 📊 Resultados del Reporte")
+            
+            # KPIs
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="card-metric">
+                    <div class="value">{estadisticas['total_usuarios']}</div>
+                    <div class="label">👥 Usuarios</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #8e44ad;">
+                    <div class="value">{estadisticas['con_permiso']}</div>
+                    <div class="label">📋 Permisos</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #27ae60;">
+                    <div class="value">{estadisticas['total_horas']:.1f}h</div>
+                    <div class="label">⏱️ Total Horas</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #e67e22;">
+                    <div class="value">{estadisticas['promedio']:.1f}h</div>
+                    <div class="label">📊 Promedio</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Resumen por plataforma
+            st.markdown("### 📈 Distribución por Plataforma")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #3498db;">
+                    <div class="value" style="color: #3498db;">{estadisticas['horas_camp']:.1f}h</div>
+                    <div class="label">🏛️ Camp Legal</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #2ecc71;">
+                    <div class="value" style="color: #2ecc71;">{estadisticas['horas_sb']:.1f}h</div>
+                    <div class="label">📋 Smokeball</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="card-metric" style="border-top-color: #e67e22;">
+                    <div class="value" style="color: #e67e22;">{estadisticas['horas_tg']:.1f}h</div>
+                    <div class="label">⏱️ Toggl</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Tabla de resultados
+            st.markdown("### 👥 Detalle por Usuario")
+            
+            # Mostrar tabla con formato
+            df_mostrar = df_resultados.copy()
+            df_mostrar = df_mostrar[[
+                'Usuario', 'Camp Legal', 'Smokeball', 'Toggl', 
+                'Total_Horas', 'Dias_Activos', 'Permiso', 'Estado'
+            ]]
+            
+            # Renombrar columnas para mejor visualización
+            df_mostrar.columns = [
+                'Usuario', 'Camp Legal', 'Smokeball', 'Toggl',
+                'Total Horas', 'Días Activos', 'Permiso', 'Estado'
+            ]
+            
+            st.dataframe(
+                df_mostrar,
+                use_container_width=True,
+                height=400,
+                hide_index=True
+            )
+            
+            # Información adicional
+            st.markdown("---")
+            st.markdown("### 📋 Información Adicional")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="info-box">
+                    <strong>📊 Jornada total esperada:</strong> {procesador.jornada_total_esperada:.0f}h<br>
+                    <strong>📅 Días hábiles:</strong> {procesador.dias_habiles}<br>
+                    <strong>📋 Usuarios en Novedades 2:</strong> {len(procesador.usuarios_novedades_2)}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="success-box">
+                    <strong>✅ Resumen:</strong><br>
+                    • {estadisticas['total_usuarios']} usuarios con turno<br>
+                    • {estadisticas['total_horas']:.1f} horas totales<br>
+                    • Promedio de {estadisticas['promedio']:.1f} horas por usuario
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Descargar resultados
+            st.markdown("### 📥 Exportar")
+            
+            # Convertir a CSV para descarga
+            csv = df_resultados.to_csv(index=False).encode('utf-8')
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📥 Descargar CSV",
+                    data=csv,
+                    file_name=f"reporte_tiempos_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Crear Excel con múltiples hojas
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_resultados.to_excel(writer, sheet_name='Reporte', index=False)
+                    # Agregar hoja de resumen
+                    resumen = pd.DataFrame([{
+                        'Metrica': 'Total Usuarios',
+                        'Valor': estadisticas['total_usuarios']
+                    }, {
+                        'Metrica': 'Total Horas',
+                        'Valor': estadisticas['total_horas']
+                    }, {
+                        'Metrica': 'Promedio',
+                        'Valor': estadisticas['promedio']
+                    }, {
+                        'Metrica': 'Con Permiso',
+                        'Valor': estadisticas['con_permiso']
+                    }, {
+                        'Metrica': 'Horas Camp Legal',
+                        'Valor': estadisticas['horas_camp']
+                    }, {
+                        'Metrica': 'Horas Smokeball',
+                        'Valor': estadisticas['horas_sb']
+                    }, {
+                        'Metrica': 'Horas Toggl',
+                        'Valor': estadisticas['horas_tg']
+                    }])
+                    resumen.to_excel(writer, sheet_name='Resumen', index=False)
+                
+                output.seek(0)
+                st.download_button(
+                    label="📥 Descargar Excel",
+                    data=output,
+                    file_name=f"reporte_tiempos_{fecha_inicio.strftime('%Y%m%d')}_{fecha_fin.strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+        except Exception as e:
+            st.error(f"❌ Error al procesar el reporte: {e}")
+            st.exception(e)
+    
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        Reporte generado automáticamente · Datos de Camp Legal, Smokeball y Toggl
+    </div>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
