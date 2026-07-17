@@ -1,4 +1,4 @@
-# app.py - Reporte de Tiempos para Streamlit (Versión con Diagnóstico)
+# app.py - Reporte de Tiempos para Streamlit (Basado en tu v33)
 
 import streamlit as st
 import pandas as pd
@@ -23,7 +23,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN
+# FUNCIONES DE CONVERSIÓN (DE TU CÓDIGO ORIGINAL)
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -133,6 +133,7 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
         return None
 
 def es_festivo(fecha):
+    """Determina si una fecha es festivo"""
     festivos = [
         (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
     ]
@@ -149,7 +150,7 @@ def get_jornada_esperada_por_dia(fecha):
         return 8.0
 
 # ============================================================
-# CONFIGURACIÓN DE COLUMNAS
+# CONFIGURACIÓN DE COLUMNAS (DE TU CÓDIGO ORIGINAL)
 # ============================================================
 
 COLUMNAS_MAPEO = {
@@ -235,7 +236,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PROCESADOR
+# CLASE PRINCIPAL (TU CÓDIGO ORIGINAL ADAPTADO PARA STREAMLIT)
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -277,7 +278,18 @@ class ReporteTiemposSystem:
             fecha_actual += timedelta(days=1)
         return max(total, 1)
     
+    def _obtener_dias_con_jornada(self):
+        dias = []
+        fecha_actual = self.fecha_inicio
+        while fecha_actual <= self.fecha_fin:
+            jornada = get_jornada_esperada_por_dia(fecha_actual)
+            if jornada > 0:
+                dias.append((fecha_actual, jornada))
+            fecha_actual += timedelta(days=1)
+        return dias
+    
     def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
+        """Carga un archivo desde bytes (Streamlit)"""
         try:
             if sheet_name:
                 df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
@@ -381,7 +393,7 @@ class ReporteTiemposSystem:
     def procesar_novedades(self):
         novedades_list = []
         
-        # Novedades MAX (hoja Novedades)
+        # Novedades MAX (hoja Novedades - permisos generales)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -668,22 +680,6 @@ st.markdown("""
         border-radius: 10px;
         color: #1a7a42;
     }
-    .diagnostico-box {
-        background: #f0f4f8;
-        border: 1px solid #d5dbe0;
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin: 10px 0;
-    }
-    .stButton > button {
-        background-color: #1a3a5c;
-        color: white;
-        font-weight: 600;
-    }
-    .stButton > button:hover {
-        background-color: #2c5f8a;
-        color: white;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -745,7 +741,6 @@ with st.sidebar:
     st.divider()
     st.subheader("📁 Archivos")
     
-    # Diccionario para almacenar archivos
     uploaded_files = {}
     
     # Power BI
@@ -770,7 +765,6 @@ with st.sidebar:
         
         if archivo_novedades:
             st.success("✅ Archivo cargado correctamente")
-            # Guardar el mismo archivo para ambas hojas
             uploaded_files['novedades_max'] = archivo_novedades
             uploaded_files['novedades_max_2'] = archivo_novedades
     
@@ -881,99 +875,24 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         # Inicializar procesador
         procesador = ReporteTiemposSystem(fecha_inicio, fecha_fin)
         
-        # ============================================================
-        # DIAGNÓSTICO - Carga de archivos
-        # ============================================================
-        
-        st.markdown("---")
-        st.markdown("### 🔍 Diagnóstico de Carga")
-        
-        # Power BI
-        if uploaded_files.get('powerbi') is not None:
-            st.write("📖 **Cargando Power BI...**")
-            procesador.cargar_archivo(uploaded_files['powerbi'], 'powerbi')
-            st.success(f"✅ Power BI: {len(procesador.df_powerbi)} registros")
-            st.write(f"   Columnas: {list(procesador.df_powerbi.columns)}")
-        
-        # Novedades MAX - UN SOLO ARCHIVO CON DOS HOJAS
-        if uploaded_files.get('novedades_max') is not None:
-            st.write("📖 **Cargando Template_Novedades_RRHH_MAX...**")
-            
-            # Cargar hoja Novedades
-            try:
-                df_novedades = pd.read_excel(uploaded_files['novedades_max'], sheet_name='Novedades')
-                procesador.df_novedades_max = df_novedades
-                st.success(f"✅ Novedades (hoja 1): {len(df_novedades)} registros")
-                st.write(f"   Columnas: {list(df_novedades.columns)}")
-                
-                # Mostrar muestra
-                if len(df_novedades) > 0:
-                    st.write("📊 **Muestra de Novedades:**")
-                    st.dataframe(df_novedades.head(5))
-            except Exception as e:
-                st.error(f"❌ Error cargando hoja 'Novedades': {e}")
-                st.stop()
-            
-            # Cargar hoja Novedades 2
-            try:
-                df_novedades_2 = pd.read_excel(uploaded_files['novedades_max'], sheet_name='Novedades 2')
-                procesador.df_novedades_max_2 = df_novedades_2
-                st.success(f"✅ Novedades 2 (hoja 2): {len(df_novedades_2)} registros")
-                st.write(f"   Columnas: {list(df_novedades_2.columns)}")
-                
-                # Mostrar muestra
-                if len(df_novedades_2) > 0:
-                    st.write("📊 **Muestra de Novedades 2:**")
-                    st.dataframe(df_novedades_2.head(5))
-                    
-                    # Verificar si hay datos en el rango de fechas
-                    if 'Fecha' in df_novedades_2.columns:
-                        try:
-                            fechas = pd.to_datetime(df_novedades_2['Fecha'])
-                            registros_rango = len(fechas[
-                                (fechas >= pd.Timestamp(fecha_inicio)) & 
-                                (fechas <= pd.Timestamp(fecha_fin))
-                            ])
-                            st.write(f"📅 Registros en el rango de fechas: {registros_rango}")
-                        except:
-                            st.warning("⚠️ No se pudieron procesar las fechas")
-            except Exception as e:
-                st.error(f"❌ Error cargando hoja 'Novedades 2': {e}")
-                st.stop()
-        
-        # Plataformas
-        for key in ['camp_legal', 'smokeball', 'toggl']:
-            if uploaded_files.get(key) is not None:
-                st.write(f"📖 **Cargando {key}...**")
-                procesador.cargar_archivo(uploaded_files[key], key)
-                df = getattr(procesador, f"df_{key}", None)
-                if df is not None:
-                    st.success(f"✅ {key}: {len(df)} registros")
-                    if len(df) > 0:
-                        st.write(f"   Columnas: {list(df.columns)}")
-        
-        st.divider()
-        st.markdown("### 🔄 Procesando datos...")
+        # Cargar archivos
+        for key, file in uploaded_files.items():
+            if file is not None:
+                if key == 'novedades_max':
+                    # Cargar hoja Novedades
+                    procesador.cargar_archivo(file, 'novedades_max', sheet_name='Novedades')
+                    # Cargar hoja Novedades 2
+                    procesador.cargar_archivo(file, 'novedades_max_2', sheet_name='Novedades 2')
+                else:
+                    procesador.cargar_archivo(file, key)
         
         # Construir mapa de nombres
-        st.write("📖 **Construyendo mapa de nombres...**")
         if not procesador.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica el archivo Power BI Resources.")
             st.stop()
-        st.success("✅ Mapa de nombres construido")
         
         # Procesar novedades
-        st.write("📖 **Procesando novedades...**")
         procesador.procesar_novedades()
-        st.success(f"✅ Usuarios en Novedades 2 en el rango: {len(procesador.usuarios_novedades_2)}")
-        
-        # Mostrar usuarios de Novedades 2
-        if procesador.usuarios_novedades_2:
-            with st.expander("📋 Usuarios en Novedades 2"):
-                for usuario in sorted(procesador.usuarios_novedades_2)[:20]:
-                    st.write(f"• {usuario}")
-                if len(procesador.usuarios_novedades_2) > 20:
-                    st.write(f"... y {len(procesador.usuarios_novedades_2) - 20} más")
         
         # Verificar usuarios en Novedades 2
         if not procesador.usuarios_novedades_2:
@@ -982,11 +901,9 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.stop()
         
         # Consolidar resultados
-        st.write("📖 **Consolidando resultados...**")
         if not procesador.consolidar():
             st.error("❌ Error al consolidar datos.")
             st.stop()
-        st.success("✅ Datos consolidados")
         
         # Obtener resultados
         df_resultados = procesador.obtener_resultados()
