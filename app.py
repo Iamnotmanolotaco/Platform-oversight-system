@@ -1,5 +1,3 @@
-# app.py - Reporte de Tiempos para Streamlit (Versión Final)
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -242,7 +240,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PROCESADOR (TU CÓDIGO ORIGINAL ADAPTADO PARA STREAMLIT)
+# CLASE PROCESADOR (TU CÓDIGO ORIGINAL ADAPTADO)
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -294,10 +292,14 @@ class ReporteTiemposSystem:
             fecha_actual += timedelta(days=1)
         return dias
     
-    def cargar_archivo(self, archivo_bytes, key):
+    def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
         """Carga un archivo desde bytes (Streamlit)"""
         try:
-            df = pd.read_excel(archivo_bytes)
+            if sheet_name:
+                df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
+            else:
+                df = pd.read_excel(archivo_bytes)
+            
             if key == 'powerbi':
                 self.df_powerbi = df
             elif key == 'camp_legal':
@@ -395,7 +397,7 @@ class ReporteTiemposSystem:
     def procesar_novedades(self):
         novedades_list = []
         
-        # Novedades MAX
+        # Novedades MAX (hoja Novedades - permisos generales)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -409,7 +411,7 @@ class ReporteTiemposSystem:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
         
-        # Novedades MAX 2
+        # Novedades MAX 2 (hoja Novedades 2 - sábados y festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -771,12 +773,10 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📁 Archivos")
-    st.caption("Sube los archivos Excel necesarios")
-    
-    uploaded_files = {}
     
     # Power BI
     with st.expander("📊 Power BI resources.xlsx", expanded=True):
+        uploaded_files = {}
         uploaded_files['powerbi'] = st.file_uploader(
             "Power BI resources.xlsx (Names)",
             type=['xlsx'],
@@ -784,20 +784,22 @@ with st.sidebar:
             label_visibility="collapsed"
         )
     
-    # Novedades
+    # Template_Novedades_RRHH_MAX - UN SOLO ARCHIVO
     with st.expander("📋 Template_Novedades_RRHH_MAX", expanded=True):
-        uploaded_files['novedades_max'] = st.file_uploader(
-            "Novedades (MAX)",
+        st.info("📌 **Un solo archivo con dos hojas:**\n- **Novedades**: Permisos generales\n- **Novedades 2**: Sábados y festivos")
+        
+        archivo_novedades = st.file_uploader(
+            "Template_Novedades_RRHH_MAX 1 1 2.xlsx",
             type=['xlsx'],
             key="novedades_max",
             label_visibility="collapsed"
         )
-        uploaded_files['novedades_max_2'] = st.file_uploader(
-            "Novedades 2 (MAX) - OBLIGATORIO",
-            type=['xlsx'],
-            key="novedades_max_2",
-            label_visibility="collapsed"
-        )
+        
+        if archivo_novedades:
+            st.success("✅ Archivo cargado correctamente")
+            # Cargar ambas hojas
+            uploaded_files['novedades_max'] = archivo_novedades
+            uploaded_files['novedades_max_2'] = archivo_novedades
     
     # Plataformas
     with st.expander("🏛️ Camp Legal", expanded=False):
@@ -827,7 +829,7 @@ with st.sidebar:
     # Novedades CLG
     with st.expander("📋 Template_Novedades_RRHH_CLG", expanded=False):
         uploaded_files['novedades_clg'] = st.file_uploader(
-            "Novedades CLG",
+            "Template_Novedades_RRHH_CLG - last.xlsx",
             type=['xlsx'],
             key="novedades_clg",
             label_visibility="collapsed"
@@ -838,11 +840,11 @@ with st.sidebar:
     archivos_cargados = sum([1 for v in uploaded_files.values() if v is not None])
     
     # Verificar archivos obligatorios
-    obligatorios = ['powerbi', 'novedades_max_2']
+    obligatorios = ['powerbi', 'novedades_max']  # Novedades MAX es un solo archivo
     obligatorios_cargados = sum([1 for k in obligatorios if uploaded_files.get(k) is not None])
     
-    st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/7")
-    st.markdown(f"**✅ Obligatorios:** {obligatorios_cargados}/2 (Power BI + Novedades 2)")
+    st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/6")
+    st.markdown(f"**✅ Obligatorios:** {obligatorios_cargados}/2 (Power BI + Novedades MAX)")
     
     procesar = st.button(
         "🚀 Generar Reporte",
@@ -853,7 +855,7 @@ with st.sidebar:
 
 # Área principal
 if not procesar:
-    st.info("👈 Sube los archivos requeridos (Power BI y Novedades 2) y presiona 'Generar Reporte'")
+    st.info("👈 Sube los archivos requeridos (Power BI y Novedades MAX) y presiona 'Generar Reporte'")
     
     st.markdown("### 📋 Archivos requeridos")
     
@@ -862,7 +864,7 @@ if not procesar:
         st.markdown("""
         **✅ Obligatorios:**
         - 📊 Power BI resources.xlsx
-        - 📋 Novedades 2 (MAX)
+        - 📋 Template_Novedades_RRHH_MAX (con 2 hojas)
         """)
     with col2:
         st.markdown("""
@@ -874,15 +876,22 @@ if not procesar:
     with col3:
         st.markdown("""
         **📋 Opcionales:**
-        - Novedades MAX
-        - Novedades CLG
+        - Template_Novedades_RRHH_CLG
         """)
     
     st.markdown("---")
     st.markdown("""
     <div class="info-box">
-        <strong>💡 Nota:</strong> El reporte solo mostrará usuarios que aparecen en <strong>Novedades 2</strong>.
+        <strong>💡 Nota:</strong> El reporte solo mostrará usuarios que aparecen en <strong>Novedades 2</strong> (hoja del mismo archivo).
         Los usuarios que no están en Novedades 2 están descansando y no aparecerán.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="background: #eafaf1; border: 1px solid #a9dfbf; padding: 12px 16px; border-radius: 10px;">
+        <strong>📋 Estructura del archivo Template_Novedades_RRHH_MAX:</strong><br>
+        • <strong>Hoja "Novedades":</strong> Permisos generales (columnas: Persona, Fecha Inicio, Fecha Fin, Tipo de Novedad)<br>
+        • <strong>Hoja "Novedades 2":</strong> Sábados y festivos (columnas: Persona, Fecha, Tipo de Novedad)
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -896,7 +905,12 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         # Cargar archivos
         for key, file in uploaded_files.items():
             if file is not None:
-                procesador.cargar_archivo(file, key)
+                # Para Novedades MAX, cargar ambas hojas
+                if key == 'novedades_max':
+                    procesador.cargar_archivo(file, 'novedades_max', sheet_name='Novedades')
+                    procesador.cargar_archivo(file, 'novedades_max_2', sheet_name='Novedades 2')
+                else:
+                    procesador.cargar_archivo(file, key)
         
         # Construir mapa de nombres
         if not procesador.construir_mapa_nombres():
@@ -937,6 +951,8 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         <div class="info-box">
             <strong>📋 Usuarios en Novedades 2:</strong> {len(procesador.usuarios_novedades_2)} personas deben marcar tiempo
             <span style="margin-left:20px;">⛔ <strong>Usuarios NO en Novedades 2:</strong> Están descansando y no aparecen en el reporte</span>
+            <br>
+            <span style="font-size:12px; color:#7d6608;">📌 Sábados: 4h · Festivos: 0h</span>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1067,6 +1083,21 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_resultados.to_excel(writer, sheet_name='Reporte', index=False)
+                # Agregar hoja de resumen
+                resumen = pd.DataFrame([{
+                    'Metrica': 'Total Usuarios',
+                    'Valor': estadisticas['total_usuarios']
+                }, {
+                    'Metrica': 'Total Horas',
+                    'Valor': estadisticas['total_horas']
+                }, {
+                    'Metrica': 'Promedio',
+                    'Valor': estadisticas['promedio']
+                }, {
+                    'Metrica': 'Con Permiso',
+                    'Valor': estadisticas['con_permiso']
+                }])
+                resumen.to_excel(writer, sheet_name='Resumen', index=False)
             output.seek(0)
             
             st.download_button(
