@@ -1,4 +1,4 @@
-# app.py - BASADO EN TU CÓDIGO v33 (SOLO ADAPTADO PARA STREAMLIT)
+# app.py - VERSIÓN COMPLETA CON HOJAS CORRECTAS
 
 import streamlit as st
 import pandas as pd
@@ -21,10 +21,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# ============================================================
-# TU CÓDIGO ORIGINAL v33 - EXACTAMENTE IGUAL
-# ============================================================
 
 # ============================================================
 # FUNCIONES DE CONVERSIÓN (DE TU CÓDIGO ORIGINAL)
@@ -262,7 +258,7 @@ class ReporteTiemposSystem:
         
         self.fecha_inicio_str = self.fecha_inicio.strftime('%Y%m%d')
         self.fecha_fin_str = self.fecha_fin.strftime('%Y%m%d')
-        self.ruta_base = ""  # Ya no usamos rutas locales
+        self.ruta_base = ""
         self.jornada_esperada = 8.0
         
         self.df_camp = None
@@ -320,7 +316,7 @@ class ReporteTiemposSystem:
     # ============================================================
     
     def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
-        """Carga un archivo desde bytes (Streamlit) - REEMPLAZA leer_archivos()"""
+        """Carga un archivo desde bytes (Streamlit)"""
         try:
             if sheet_name:
                 df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
@@ -345,10 +341,6 @@ class ReporteTiemposSystem:
         except Exception as e:
             st.error(f"Error cargando {key}: {e}")
             return False
-    
-    # ============================================================
-    # EL RESTO DEL CÓDIGO ES EXACTAMENTE IGUAL A TU v33
-    # ============================================================
     
     def normalizar_nombre(self, nombre):
         if not isinstance(nombre, str):
@@ -883,7 +875,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         # 1. Crear instancia con las fechas seleccionadas
         sistema = ReporteTiemposSystem(fecha_inicio, fecha_fin)
         
-        # 2. Cargar archivos (USANDO TU MÉTODO cargar_archivo)
+        # 2. Cargar archivos CON LAS HOJAS CORRECTAS
         if archivo_powerbi is not None:
             sistema.cargar_archivo(archivo_powerbi, 'powerbi')
             st.success("✅ Power BI cargado")
@@ -897,17 +889,47 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_novedades_clg, 'novedades_clg')
             st.success("✅ Novedades CLG cargado")
         
+        # ============================================================
+        # PLATAFORMAS - CARGAR CON LA HOJA CORRECTA
+        # ============================================================
+        
         if archivo_camp is not None:
-            sistema.cargar_archivo(archivo_camp, 'camp_legal')
-            st.success("✅ Camp Legal cargado")
+            # Camp Legal usa la hoja 'Time entries'
+            sistema.cargar_archivo(archivo_camp, 'camp_legal', sheet_name='Time entries')
+            st.success("✅ Camp Legal cargado (Time entries)")
         
         if archivo_sb is not None:
-            sistema.cargar_archivo(archivo_sb, 'smokeball')
-            st.success("✅ Smokeball cargado")
+            # Smokeball usa la hoja 'Entries'
+            sistema.cargar_archivo(archivo_sb, 'smokeball', sheet_name='Entries')
+            st.success("✅ Smokeball cargado (Entries)")
         
         if archivo_tg is not None:
-            sistema.cargar_archivo(archivo_tg, 'toggl')
-            st.success("✅ Toggl cargado")
+            # Toggl usa la hoja 'DataBaseToggl'
+            sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
+            st.success("✅ Toggl cargado (DataBaseToggl)")
+        
+        # ============================================================
+        # DIAGNÓSTICO - Verificar que se cargaron correctamente
+        # ============================================================
+        
+        with st.expander("🔍 Diagnóstico de archivos cargados", expanded=True):
+            if sistema.df_camp is not None:
+                st.write(f"✅ Camp Legal: {len(sistema.df_camp)} registros")
+                st.write(f"   Columnas: {list(sistema.df_camp.columns)}")
+            else:
+                st.warning("⚠️ Camp Legal NO cargado")
+            
+            if sistema.df_smokeball is not None:
+                st.write(f"✅ Smokeball: {len(sistema.df_smokeball)} registros")
+                st.write(f"   Columnas: {list(sistema.df_smokeball.columns)}")
+            else:
+                st.warning("⚠️ Smokeball NO cargado")
+            
+            if sistema.df_toggl is not None:
+                st.write(f"✅ Toggl: {len(sistema.df_toggl)} registros")
+                st.write(f"   Columnas: {list(sistema.df_toggl.columns)}")
+            else:
+                st.warning("⚠️ Toggl NO cargado")
         
         # 3. Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
