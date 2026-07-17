@@ -1124,7 +1124,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         # Aplicar estilo a la columna de incumplimiento
         styled_df = df_mostrar.style.applymap(
             color_incumplimiento, 
-            subset=['⚠️ Incumple']
+            subset=[ 'Incumple']
         )
         
         # Mostrar tabla con estilo
