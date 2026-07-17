@@ -1,339 +1,89 @@
-# app.py - Reporte de Tiempos para Streamlit (Basado en tu v33)
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import os
-import sys
-import re
-import warnings
-from io import BytesIO
-warnings.filterwarnings('ignore')
-
 # ============================================================
-# CONFIGURACIÓN DE LA PÁGINA
+# PROCESAR REPORTE CON DIAGNÓSTICO PASO A PASO
 # ============================================================
 
-st.set_page_config(
-    page_title="📊 Reporte de Tiempos",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ============================================================
-# FUNCIONES DE CONVERSIÓN (DE TU CÓDIGO ORIGINAL)
-# ============================================================
-
-def convertir_hora_tiempo(valor):
-    if pd.isna(valor):
-        return 0.0
-    if isinstance(valor, (int, float)):
-        return float(valor)
-    if isinstance(valor, str):
-        valor_limpio = valor.strip()
-        if ':' in valor_limpio:
-            try:
-                partes = valor_limpio.split(':')
-                if len(partes) == 2:
-                    return float(partes[0]) + float(partes[1]) / 60
-                elif len(partes) == 3:
-                    return float(partes[0]) + float(partes[1]) / 60 + float(partes[2]) / 3600
-            except:
-                pass
-        try:
-            valor_limpio = re.sub(r'[^0-9.]', '', valor_limpio)
-            if valor_limpio:
-                return float(valor_limpio)
-        except:
-            pass
-        return 0.0
-    if isinstance(valor, pd.Timedelta):
-        return valor.total_seconds() / 3600
-    return 0.0
-
-def convertir_hora_decimal(valor):
-    if pd.isna(valor):
-        return 0.0
-    if isinstance(valor, (int, float)):
-        return float(valor)
-    if isinstance(valor, str):
-        valor_limpio = valor.strip()
-        if ',' in valor_limpio and '.' not in valor_limpio:
-            valor_limpio = valor_limpio.replace(',', '.')
-        if 'h' in valor_limpio.lower():
-            valor_limpio = valor_limpio.lower().replace('h', '').strip()
-        try:
-            valor_limpio = re.sub(r'[^0-9.]', '', valor_limpio)
-            if valor_limpio:
-                return float(valor_limpio)
-        except:
-            pass
-        return 0.0
-    if isinstance(valor, pd.Timedelta):
-        return valor.total_seconds() / 3600
-    return 0.0
-
-def convertir_horas_segun_formato(valor, formato):
-    if formato == 'tiempo':
-        return convertir_hora_tiempo(valor)
-    elif formato == 'decimal':
-        return convertir_hora_decimal(valor)
-    else:
-        resultado = convertir_hora_tiempo(valor)
-        if resultado == 0:
-            resultado = convertir_hora_decimal(valor)
-        return resultado
-
-def limpiar_nombre(nombre):
-    if not isinstance(nombre, str):
-        return nombre
-    nombre = nombre.strip()
-    prefijos = [
-        'Assistant', 'Manager', 'Coordinator', 'Specialist', 
-        'Analyst', 'Director', 'Supervisor', 'Lead', 'Senior',
-        'Junior', 'Associate', 'Consultant', 'Advisor', 'Officer',
-        'Executive', 'Head', 'Chief', 'Principal', 'Partner',
-        'CL Finance Assistant', 'Finance Assistant', 'Admin',
-        'Operations', 'Support', 'Team Lead', 'Team Leader',
-        'Legal Agent Support', 'Customer Support Agent'
-    ]
-    for prefijo in prefijos:
-        if nombre.startswith(prefijo + ' '):
-            nombre = nombre[len(prefijo) + 1:]
-        elif nombre.startswith(prefijo + '-'):
-            nombre = nombre[len(prefijo) + 1:]
-        elif nombre.startswith(prefijo + ':'):
-            nombre = nombre[len(prefijo) + 1:]
-        elif nombre.startswith(prefijo):
-            if len(nombre) > len(prefijo) and nombre[len(prefijo)] in [' ', '-', ':']:
-                nombre = nombre[len(prefijo) + 1:]
-    nombre = re.sub(r'\([^)]*\)', '', nombre).strip()
-    nombre = re.sub(r'\[[^\]]*\]', '', nombre).strip()
-    nombre = re.sub(r'\s+', ' ', nombre)
-    return nombre.strip()
-
-def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
-    if pd.isna(valor):
-        return None
-    if isinstance(valor, (pd.Timestamp, datetime)):
-        return valor.date()
-    if isinstance(valor, str):
-        try:
-            return datetime.strptime(valor.strip(), formato_fecha).date()
-        except:
-            try:
-                return pd.to_datetime(valor).date()
-            except:
-                return None
+with st.spinner("🔄 Procesando datos... Por favor espera"):
     try:
-        return pd.to_datetime(valor).date()
-    except:
-        return None
-
-def es_festivo(fecha):
-    """Determina si una fecha es festivo"""
-    festivos = [
-        (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
-    ]
-    return (fecha.month, fecha.day) in festivos
-
-def get_jornada_esperada_por_dia(fecha):
-    if fecha.weekday() == 5:
-        return 4.0
-    elif fecha.weekday() == 6:
-        return 0.0
-    elif es_festivo(fecha):
-        return 0.0
-    else:
-        return 8.0
-
-# ============================================================
-# CONFIGURACIÓN DE COLUMNAS (DE TU CÓDIGO ORIGINAL)
-# ============================================================
-
-COLUMNAS_MAPEO = {
-    'camp_legal': {
-        'archivo': 'Reporte Diario Camp Legal.xlsx',
-        'hoja_datos': 'Time entries',
-        'columnas': {
-            'nombre': 'Staff Name',
-            'horas': 'Hours Spent',
-            'fecha': 'Time Entry Date',
-            'actividad': 'Activity'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'smokeball': {
-        'archivo': 'Reporte_general.xlsx',
-        'hoja_datos': 'Entries',
-        'columnas': {
-            'nombre': 'Name',
-            'horas': 'Hours',
-            'fecha': 'Date',
-            'actividad': 'Subject'
-        },
-        'formato_horas': 'decimal',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'toggl': {
-        'archivo': 'Revision de entradas de tiempo - Toggl.xlsx',
-        'hoja_datos': 'DataBaseToggl',
-        'columnas': {
-            'nombre': 'Member',
-            'horas': 'Dur',
-            'fecha': 'Date1',
-            'actividad': 'Project'
-        },
-        'formato_horas': 'tiempo',
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'powerbi': {
-        'archivo': 'Power BI resources.xlsx',
-        'hoja_datos': 'Names',
-        'columnas': {
-            'nombre': 'NAME CORRECT',
-            'nombre_cl': 'NAME CL',
-            'nombre_sb': 'NAME SB',
-            'nombre_tg': 'NAME TG',
-            'status': 'USER STATUS'
-        }
-    },
-    'novedades_max': {
-        'archivo': 'Template_Novedades_RRHH_MAX 1 1 2.xlsx',
-        'hoja_datos': 'Novedades',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha_inicio': 'Fecha Inicio',
-            'fecha_fin': 'Fecha Fin',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'novedades_max_2': {
-        'archivo': 'Template_Novedades_RRHH_MAX 1 1 2.xlsx',
-        'hoja_datos': 'Novedades 2',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha': 'Fecha',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
-    },
-    'novedades_clg': {
-        'archivo': 'Template_Novedades_RRHH_CLG - last.xlsx',
-        'hoja_datos': 'Novedades',
-        'columnas': {
-            'nombre': 'Persona',
-            'fecha_inicio': 'Fecha Inicio',
-            'fecha_fin': 'Fecha Fin',
-            'tipo': 'Tipo de Novedad'
-        },
-        'formato_fecha': '%m/%d/%Y'
-    }
-}
-
-# ============================================================
-# CLASE PRINCIPAL (TU CÓDIGO ORIGINAL ADAPTADO PARA STREAMLIT)
-# ============================================================
-
-class ReporteTiemposSystem:
-    def __init__(self, fecha_inicio, fecha_fin):
-        self.fecha_inicio = fecha_inicio
-        self.fecha_fin = fecha_fin
-        self.jornada_esperada = 8.0
+        # ============================================================
+        # PASO 1: INICIALIZAR
+        # ============================================================
+        st.write("### 📋 PASO 1: Inicializando procesador...")
+        procesador = ReporteTiemposSystem(fecha_inicio, fecha_fin)
+        st.success("✅ Procesador inicializado")
         
-        self.df_camp = None
-        self.df_smokeball = None
-        self.df_toggl = None
-        self.df_powerbi = None
-        self.df_novedades_max = None
-        self.df_novedades_max_2 = None
-        self.df_novedades_clg = None
-        self.df_analisis = None
+        # ============================================================
+        # PASO 2: CARGAR ARCHIVOS
+        # ============================================================
+        st.write("### 📋 PASO 2: Cargando archivos...")
         
-        self.mapa_nombres = {}
-        self.usuarios_con_plataforma = []
-        self.usuarios_novedades_2 = set()
+        archivos_cargados = {}
         
-        self.dias_habiles = self._calcular_dias_habiles()
-        self.jornada_total_esperada = self._calcular_jornada_total()
-    
-    def _calcular_dias_habiles(self):
-        dias = 0
-        fecha_actual = self.fecha_inicio
-        while fecha_actual <= self.fecha_fin:
-            if fecha_actual.weekday() < 5:
-                dias += 1
-            fecha_actual += timedelta(days=1)
-        return max(dias, 1)
-    
-    def _calcular_jornada_total(self):
-        total = 0
-        fecha_actual = self.fecha_inicio
-        while fecha_actual <= self.fecha_fin:
-            total += get_jornada_esperada_por_dia(fecha_actual)
-            fecha_actual += timedelta(days=1)
-        return max(total, 1)
-    
-    def _obtener_dias_con_jornada(self):
-        dias = []
-        fecha_actual = self.fecha_inicio
-        while fecha_actual <= self.fecha_fin:
-            jornada = get_jornada_esperada_por_dia(fecha_actual)
-            if jornada > 0:
-                dias.append((fecha_actual, jornada))
-            fecha_actual += timedelta(days=1)
-        return dias
-    
-    def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
-        """Carga un archivo desde bytes (Streamlit)"""
-        try:
-            if sheet_name:
-                df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
-            else:
-                df = pd.read_excel(archivo_bytes)
-            
-            if key == 'powerbi':
-                self.df_powerbi = df
-            elif key == 'camp_legal':
-                self.df_camp = df
-            elif key == 'smokeball':
-                self.df_smokeball = df
-            elif key == 'toggl':
-                self.df_toggl = df
-            elif key == 'novedades_max':
-                self.df_novedades_max = df
-            elif key == 'novedades_max_2':
-                self.df_novedades_max_2 = df
-            elif key == 'novedades_clg':
-                self.df_novedades_clg = df
-            return True
-        except Exception as e:
-            st.error(f"Error cargando {key}: {e}")
-            return False
-    
-    def normalizar_nombre(self, nombre):
-        if not isinstance(nombre, str):
-            return nombre
-        nombre_limpio = limpiar_nombre(nombre.strip())
-        if not nombre_limpio:
-            return nombre_limpio
-        if nombre_limpio in self.mapa_nombres:
-            return self.mapa_nombres[nombre_limpio]
-        if nombre.strip() in self.mapa_nombres:
-            return self.mapa_nombres[nombre.strip()]
-        for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            if (nombre_limpio.lower() in nombre_plat.lower() or 
-                nombre_plat.lower() in nombre_limpio.lower()):
-                return nombre_canon
-        return nombre_limpio
-    
-    def construir_mapa_nombres(self):
-        if self.df_powerbi is None:
-            return False
+        for key, file in uploaded_files.items():
+            if file is not None:
+                st.write(f"📖 Cargando {key}...")
+                
+                if key == 'novedades_max':
+                    # Cargar hoja Novedades
+                    try:
+                        df_novedades = pd.read_excel(file, sheet_name='Novedades')
+                        procesador.df_novedades_max = df_novedades
+                        st.success(f"✅ Novedades (hoja 1): {len(df_novedades)} registros")
+                        st.write(f"   Columnas: {list(df_novedades.columns)}")
+                    except Exception as e:
+                        st.error(f"❌ Error cargando Novedades: {e}")
+                        st.stop()
+                    
+                    # Cargar hoja Novedades 2
+                    try:
+                        df_novedades_2 = pd.read_excel(file, sheet_name='Novedades 2')
+                        procesador.df_novedades_max_2 = df_novedades_2
+                        st.success(f"✅ Novedades 2 (hoja 2): {len(df_novedades_2)} registros")
+                        st.write(f"   Columnas: {list(df_novedades_2.columns)}")
+                        
+                        # Mostrar muestra
+                        if len(df_novedades_2) > 0:
+                            st.write("📊 **Muestra de Novedades 2:**")
+                            st.dataframe(df_novedades_2.head(5))
+                    except Exception as e:
+                        st.error(f"❌ Error cargando Novedades 2: {e}")
+                        st.stop()
+                
+                elif key == 'powerbi':
+                    try:
+                        df = pd.read_excel(file)
+                        procesador.df_powerbi = df
+                        st.success(f"✅ Power BI: {len(df)} registros")
+                        st.write(f"   Columnas: {list(df.columns)}")
+                    except Exception as e:
+                        st.error(f"❌ Error cargando Power BI: {e}")
+                        st.stop()
+                
+                else:
+                    try:
+                        df = pd.read_excel(file)
+                        if key == 'camp_legal':
+                            procesador.df_camp = df
+                        elif key == 'smokeball':
+                            procesador.df_smokeball = df
+                        elif key == 'toggl':
+                            procesador.df_toggl = df
+                        elif key == 'novedades_clg':
+                            procesador.df_novedades_clg = df
+                        st.success(f"✅ {key}: {len(df)} registros")
+                    except Exception as e:
+                        st.error(f"❌ Error cargando {key}: {e}")
+                        st.stop()
+        
+        st.success("✅ Todos los archivos cargados")
+        
+        # ============================================================
+        # PASO 3: CONSTRUIR MAPA DE NOMBRES
+        # ============================================================
+        st.write("### 📋 PASO 3: Construyendo mapa de nombres...")
+        
+        if procesador.df_powerbi is None:
+            st.error("❌ No hay datos de Power BI")
+            st.stop()
         
         cols = COLUMNAS_MAPEO['powerbi']['columnas']
         col_canonico = cols.get('nombre', 'NAME CORRECT')
@@ -342,14 +92,24 @@ class ReporteTiemposSystem:
         col_tg = cols.get('nombre_tg', 'NAME TG')
         col_status = cols.get('status', 'USER STATUS')
         
-        if col_status in self.df_powerbi.columns:
-            df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
+        st.write(f"🔍 Buscando columna de nombres: '{col_canonico}'")
+        
+        if col_canonico not in procesador.df_powerbi.columns:
+            st.error(f"❌ Columna '{col_canonico}' no encontrada")
+            st.write(f"📋 Columnas disponibles: {list(procesador.df_powerbi.columns)}")
+            st.stop()
+        
+        if col_status in procesador.df_powerbi.columns:
+            df_activos = procesador.df_powerbi[procesador.df_powerbi[col_status] == 'Active'].copy()
+            st.success(f"✅ Usuarios activos: {len(df_activos)}")
         else:
-            df_activos = self.df_powerbi.copy()
+            df_activos = procesador.df_powerbi.copy()
+            st.warning(f"⚠️ Columna '{col_status}' no encontrada, usando todos los usuarios")
         
-        self.mapa_nombres = {}
-        self.usuarios_con_plataforma = []
+        procesador.mapa_nombres = {}
+        procesador.usuarios_con_plataforma = []
         
+        contador = 0
         for idx, row in df_activos.iterrows():
             nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
             if not nombre_canonico:
@@ -365,39 +125,49 @@ class ReporteTiemposSystem:
                 valor = str(row[col_cl]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
                     tiene_cl = True
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    procesador.mapa_nombres[valor] = nombre_canonico_limpio
+                    procesador.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
             
             if col_sb in df_activos.columns and pd.notna(row[col_sb]):
                 valor = str(row[col_sb]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
                     tiene_sb = True
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    procesador.mapa_nombres[valor] = nombre_canonico_limpio
+                    procesador.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
             
             if col_tg in df_activos.columns and pd.notna(row[col_tg]):
                 valor = str(row[col_tg]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
                     tiene_tg = True
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    procesador.mapa_nombres[valor] = nombre_canonico_limpio
+                    procesador.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
             
-            self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
-            self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
+            procesador.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
+            procesador.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
             
             if tiene_cl or tiene_sb or tiene_tg:
-                self.usuarios_con_plataforma.append(nombre_canonico_limpio)
+                procesador.usuarios_con_plataforma.append(nombre_canonico_limpio)
+            
+            contador += 1
+            if contador % 50 == 0:
+                st.write(f"   Procesados {contador} usuarios...")
         
-        return True
-    
-    def procesar_novedades(self):
+        st.success(f"✅ Mapa de nombres construido: {len(procesador.mapa_nombres)} entradas")
+        st.success(f"✅ Usuarios con plataforma: {len(procesador.usuarios_con_plataforma)}")
+        
+        # ============================================================
+        # PASO 4: PROCESAR NOVEDADES
+        # ============================================================
+        st.write("### 📋 PASO 4: Procesando novedades...")
+        
         novedades_list = []
         
-        # Novedades MAX (hoja Novedades - permisos generales)
-        if self.df_novedades_max is not None:
-            df_max = self.df_novedades_max.copy()
+        # Novedades MAX
+        if procesador.df_novedades_max is not None:
+            st.write("📖 Procesando Novedades MAX...")
+            df_max = procesador.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
-                df_max['Usuario_Normalizado'] = df_max['Persona'].apply(self.normalizar_nombre)
+                df_max['Usuario_Normalizado'] = df_max['Persona'].apply(procesador.normalizar_nombre)
                 df_max['Fecha_Inicio'] = df_max['Fecha Inicio'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_max['Fecha_Fin'] = df_max['Fecha Fin'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_max_validos = df_max[df_max['Fecha_Inicio'].notna() & df_max['Fecha_Fin'].notna()]
@@ -406,22 +176,30 @@ class ReporteTiemposSystem:
                 else:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
+                st.success(f"✅ Novedades MAX: {len(df_max_validos)} registros")
+            else:
+                st.warning(f"⚠️ Columnas no encontradas en Novedades MAX: {list(df_max.columns)}")
         
-        # Novedades MAX 2 (hoja Novedades 2 - Sábados y festivos)
-        if self.df_novedades_max_2 is not None:
-            df_max2 = self.df_novedades_max_2.copy()
+        # Novedades MAX 2
+        if procesador.df_novedades_max_2 is not None:
+            st.write("📖 Procesando Novedades 2...")
+            df_max2 = procesador.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
                 df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_max2_filtrado = df_max2[
-                    (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
-                    (df_max2['Fecha_Conv'] <= self.fecha_fin)
+                    (df_max2['Fecha_Conv'] >= fecha_inicio) & 
+                    (df_max2['Fecha_Conv'] <= fecha_fin)
                 ]
+                
+                st.write(f"   Registros en el rango: {len(df_max2_filtrado)}")
                 
                 for _, row in df_max2_filtrado.iterrows():
                     nombre = row['Persona']
-                    nombre_normalizado = self.normalizar_nombre(nombre)
+                    nombre_normalizado = procesador.normalizar_nombre(nombre)
                     if nombre_normalizado:
-                        self.usuarios_novedades_2.add(nombre_normalizado)
+                        procesador.usuarios_novedades_2.add(nombre_normalizado)
+                
+                st.success(f"✅ Usuarios en Novedades 2 en el rango: {len(procesador.usuarios_novedades_2)}")
                 
                 df_max2_validos = df_max2_filtrado[df_max2_filtrado['Fecha_Conv'].notna()]
                 if 'Tipo de Novedad' in df_max2.columns:
@@ -430,14 +208,18 @@ class ReporteTiemposSystem:
                     df_max2_validos['Tipo'] = 'Novedad 2'
                 df_max2_validos['Fecha_Inicio'] = df_max2_validos['Fecha_Conv']
                 df_max2_validos['Fecha_Fin'] = df_max2_validos['Fecha_Conv']
-                df_max2_validos['Usuario_Normalizado'] = df_max2_validos['Persona'].apply(self.normalizar_nombre)
+                df_max2_validos['Usuario_Normalizado'] = df_max2_validos['Persona'].apply(procesador.normalizar_nombre)
                 novedades_list.append(df_max2_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
+                st.success(f"✅ Novedades 2: {len(df_max2_validos)} registros en el rango")
+            else:
+                st.warning(f"⚠️ Columnas no encontradas en Novedades 2: {list(df_max2.columns)}")
         
         # Novedades CLG
-        if self.df_novedades_clg is not None:
-            df_clg = self.df_novedades_clg.copy()
+        if procesador.df_novedades_clg is not None:
+            st.write("📖 Procesando Novedades CLG...")
+            df_clg = procesador.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
-                df_clg['Usuario_Normalizado'] = df_clg['Persona'].apply(self.normalizar_nombre)
+                df_clg['Usuario_Normalizado'] = df_clg['Persona'].apply(procesador.normalizar_nombre)
                 df_clg['Fecha_Inicio'] = df_clg['Fecha Inicio'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_clg['Fecha_Fin'] = df_clg['Fecha Fin'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_clg_validos = df_clg[df_clg['Fecha_Inicio'].notna() & df_clg['Fecha_Fin'].notna()]
@@ -446,87 +228,70 @@ class ReporteTiemposSystem:
                 else:
                     df_clg_validos['Tipo'] = 'Permiso CLG'
                 novedades_list.append(df_clg_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
+                st.success(f"✅ Novedades CLG: {len(df_clg_validos)} registros")
+            else:
+                st.warning(f"⚠️ Columnas no encontradas en Novedades CLG: {list(df_clg.columns)}")
         
         if novedades_list:
-            self.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
+            procesador.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
+            st.success(f"✅ Total novedades combinadas: {len(procesador.df_novedades_combinadas)}")
         else:
-            self.df_novedades_combinadas = None
+            procesador.df_novedades_combinadas = None
+            st.warning("⚠️ No se encontraron novedades")
         
-        return True
-    
-    def verificar_permiso(self, usuario, fecha):
-        if self.df_novedades_combinadas is None:
-            return None
-        novedades_usuario = self.df_novedades_combinadas[
-            self.df_novedades_combinadas['Usuario_Normalizado'] == usuario
-        ]
-        for _, row in novedades_usuario.iterrows():
-            if row['Fecha_Inicio'] <= fecha <= row['Fecha_Fin']:
-                return row['Tipo']
-        return None
-    
-    def procesar_plataforma(self, df, config_key):
-        if df is None:
-            return None
+        # Mostrar usuarios de Novedades 2
+        if procesador.usuarios_novedades_2:
+            st.write("📋 **Usuarios en Novedades 2:**")
+            for i, usuario in enumerate(sorted(procesador.usuarios_novedades_2)[:20]):
+                st.write(f"   {i+1}. {usuario}")
+            if len(procesador.usuarios_novedades_2) > 20:
+                st.write(f"   ... y {len(procesador.usuarios_novedades_2) - 20} más")
         
-        config = COLUMNAS_MAPEO[config_key]
-        cols = config['columnas']
-        formato_horas = config.get('formato_horas', 'auto')
-        formato_fecha = config.get('formato_fecha', '%m/%d/%Y')
+        # Verificar usuarios en Novedades 2
+        if not procesador.usuarios_novedades_2:
+            st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
+            st.info("💡 Todos los usuarios están descansando en este período.")
+            st.stop()
         
-        col_nombre = cols.get('nombre')
-        col_horas = cols.get('horas')
-        col_fecha = cols.get('fecha')
-        col_actividad = cols.get('actividad')
+        # ============================================================
+        # PASO 5: PROCESAR PLATAFORMAS
+        # ============================================================
+        st.write("### 📋 PASO 5: Procesando plataformas...")
         
-        if col_nombre not in df.columns or col_horas not in df.columns or col_fecha not in df.columns:
-            return None
-        
-        df_proc = df.copy()
-        df_proc['Usuario_Normalizado'] = df_proc[col_nombre].astype(str).str.strip().apply(self.normalizar_nombre)
-        df_proc['Horas'] = df_proc[col_horas].apply(lambda x: convertir_horas_segun_formato(x, formato_horas))
-        
-        try:
-            df_proc['Date'] = df_proc[col_fecha].apply(lambda x: convertir_fecha(x, formato_fecha))
-        except:
-            df_proc['Date'] = self.fecha_inicio
-        
-        df_proc = df_proc[
-            (df_proc['Date'] >= self.fecha_inicio) & 
-            (df_proc['Date'] <= self.fecha_fin)
-        ]
-        
-        if len(df_proc) == 0:
-            return None
-        
-        if col_actividad in df.columns:
-            df_proc['Actividad'] = df_proc[col_actividad].astype(str)
+        # Camp Legal
+        st.write("📖 Procesando Camp Legal...")
+        df_camp = procesador.procesar_plataforma(procesador.df_camp, 'camp_legal')
+        if df_camp is not None:
+            st.success(f"✅ Camp Legal: {len(df_camp)} usuarios con tiempo")
+            st.dataframe(df_camp.head(5))
         else:
-            df_proc['Actividad'] = 'Sin actividad'
+            st.warning("⚠️ Camp Legal: No hay datos en el rango")
         
-        df_agrupado = df_proc.groupby('Usuario_Normalizado').agg({
-            'Horas': 'sum',
-            'Actividad': lambda x: ', '.join(x.unique()[:3])
-        }).reset_index()
+        # Smokeball
+        st.write("📖 Procesando Smokeball...")
+        df_sb = procesador.procesar_plataforma(procesador.df_smokeball, 'smokeball')
+        if df_sb is not None:
+            st.success(f"✅ Smokeball: {len(df_sb)} usuarios con tiempo")
+            st.dataframe(df_sb.head(5))
+        else:
+            st.warning("⚠️ Smokeball: No hay datos en el rango")
         
-        df_dias = df_proc.groupby('Usuario_Normalizado')['Date'].nunique().reset_index()
-        df_dias.columns = ['Usuario_Normalizado', 'Dias_Activos']
-        df_agrupado = df_agrupado.merge(df_dias, on='Usuario_Normalizado', how='left')
-        df_agrupado['Dias_Activos'] = df_agrupado['Dias_Activos'].fillna(0).astype(int)
+        # Toggl
+        st.write("📖 Procesando Toggl...")
+        df_tg = procesador.procesar_plataforma(procesador.df_toggl, 'toggl')
+        if df_tg is not None:
+            st.success(f"✅ Toggl: {len(df_tg)} usuarios con tiempo")
+            st.dataframe(df_tg.head(5))
+        else:
+            st.warning("⚠️ Toggl: No hay datos en el rango")
         
-        return df_agrupado
-    
-    def consolidar(self):
-        if not self.usuarios_novedades_2:
-            self.df_analisis = pd.DataFrame()
-            return True
-        
-        df_camp = self.procesar_plataforma(self.df_camp, 'camp_legal')
-        df_sb = self.procesar_plataforma(self.df_smokeball, 'smokeball')
-        df_tg = self.procesar_plataforma(self.df_toggl, 'toggl')
+        # ============================================================
+        # PASO 6: CONSOLIDAR
+        # ============================================================
+        st.write("### 📋 PASO 6: Consolidando resultados...")
         
         usuarios_dict = {}
-        for usuario in self.usuarios_novedades_2:
+        for usuario in procesador.usuarios_novedades_2:
             usuarios_dict[usuario] = {
                 'Camp Legal': 0.0,
                 'Smokeball': 0.0,
@@ -552,10 +317,11 @@ class ReporteTiemposSystem:
         procesar_plataforma_detalle(df_sb, 'Smokeball')
         procesar_plataforma_detalle(df_tg, 'Toggl')
         
+        st.write("🔍 Verificando permisos...")
         for usuario in usuarios_dict:
-            fecha_actual = self.fecha_inicio
-            while fecha_actual <= self.fecha_fin:
-                permiso = self.verificar_permiso(usuario, fecha_actual)
+            fecha_actual = fecha_inicio
+            while fecha_actual <= fecha_fin:
+                permiso = procesador.verificar_permiso(usuario, fecha_actual)
                 if permiso:
                     usuarios_dict[usuario]['Permiso'] = permiso
                     break
@@ -564,12 +330,12 @@ class ReporteTiemposSystem:
         datos = []
         for usuario, data in usuarios_dict.items():
             total = data['Camp Legal'] + data['Smokeball'] + data['Toggl']
-            porcentaje = (total / self.jornada_total_esperada * 100) if self.jornada_total_esperada > 0 else 0
+            porcentaje = (total / procesador.jornada_total_esperada * 100) if procesador.jornada_total_esperada > 0 else 0
             
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
-                estado = self.calcular_estado(total, data['Camp Legal'], data['Smokeball'], data['Toggl'], porcentaje)
+                estado = procesador.calcular_estado(total, data['Camp Legal'], data['Smokeball'], data['Toggl'], porcentaje)
             
             datos.append({
                 'Usuario': usuario,
@@ -585,337 +351,19 @@ class ReporteTiemposSystem:
                 'Plataformas_Activas': sum([1 for x in [data['Camp Legal'], data['Smokeball'], data['Toggl']] if x > 0])
             })
         
-        self.df_analisis = pd.DataFrame(datos)
-        return True
-    
-    def calcular_estado(self, total, camp, sb, tg, porcentaje):
-        if total == 0:
-            return "⛔ Sin registro"
+        procesador.df_analisis = pd.DataFrame(datos)
+        st.success(f"✅ Consolidado: {len(procesador.df_analisis)} usuarios")
         
-        plataformas = []
-        if camp > 0:
-            plataformas.append('CL')
-        if sb > 0:
-            plataformas.append('SB')
-        if tg > 0:
-            plataformas.append('TG')
+        # ============================================================
+        # PASO 7: MOSTRAR RESULTADOS
+        # ============================================================
         
-        if len(plataformas) == 0:
-            return "⛔ Sin registro"
-        elif len(plataformas) == 1:
-            return f"⚠️ Solo {plataformas[0]} ({porcentaje:.0f}%)"
-        elif len(plataformas) == 2:
-            return f"⚠️ {', '.join(plataformas)} ({porcentaje:.0f}%)"
-        else:
-            if porcentaje >= 90:
-                return f"✅ Completo ({porcentaje:.0f}%)"
-            elif porcentaje >= 70:
-                return f"⚠️ Parcial ({porcentaje:.0f}%)"
-            else:
-                return f"❌ Insuficiente ({porcentaje:.0f}%)"
-    
-    def obtener_resultados(self):
-        return self.df_analisis
-    
-    def get_estadisticas(self):
-        if self.df_analisis is None or self.df_analisis.empty:
-            return {
-                'total_usuarios': 0,
-                'total_horas': 0,
-                'promedio': 0,
-                'con_permiso': 0,
-                'horas_camp': 0,
-                'horas_sb': 0,
-                'horas_tg': 0
-            }
-        
-        df = self.df_analisis
-        return {
-            'total_usuarios': len(df),
-            'total_horas': df['Total_Horas'].sum(),
-            'promedio': df['Total_Horas'].mean(),
-            'con_permiso': len(df[df['Permiso'] != 'Sin permiso']),
-            'horas_camp': df['Camp Legal'].sum(),
-            'horas_sb': df['Smokeball'].sum(),
-            'horas_tg': df['Toggl'].sum()
-        }
-
-# ============================================================
-# ESTILOS CSS
-# ============================================================
-
-st.markdown("""
-<style>
-    .main-header {
-        background: linear-gradient(135deg, #1a3a5c 0%, #2c5f8a 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 15px rgba(26,58,92,0.3);
-    }
-    .main-header h1 { margin: 0; font-size: 2rem; font-weight: 700; }
-    .main-header p { margin: 0.3rem 0 0 0; opacity: 0.85; }
-    .card-metric {
-        background: white;
-        padding: 1rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        text-align: center;
-        border-top: 4px solid #2c5f8a;
-    }
-    .card-metric .value { font-size: 28px; font-weight: 800; color: #1a3a5c; }
-    .card-metric .label { font-size: 11px; text-transform: uppercase; color: #7a8a9e; font-weight: 600; }
-    .info-box {
-        background: #fef9e7;
-        border: 1px solid #f9e79f;
-        padding: 12px 16px;
-        border-radius: 10px;
-        color: #7d6608;
-    }
-    .success-box {
-        background: #eafaf1;
-        border: 1px solid #a9dfbf;
-        padding: 12px 16px;
-        border-radius: 10px;
-        color: #1a7a42;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# HEADER
-# ============================================================
-
-st.markdown("""
-<div class="main-header">
-    <h1>📊 Reporte de Tiempos</h1>
-    <p>Análisis de tiempos por plataforma · Control de calidad · Novedades 2</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-
-with st.sidebar:
-    st.header("⚙️ Configuración")
-    
-    st.subheader("📅 Rango de fechas")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input(
-            "Fecha inicio",
-            value=datetime.now().date() - timedelta(days=7),
-            format="MM/DD/YYYY"
-        )
-    with col2:
-        fecha_fin = st.date_input(
-            "Fecha fin",
-            value=datetime.now().date() - timedelta(days=1),
-            format="MM/DD/YYYY"
-        )
-    
-    st.divider()
-    st.subheader("⚡ Acceso rápido")
-    
-    if st.button("📅 Ayer", use_container_width=True):
-        fecha_inicio = datetime.now().date() - timedelta(days=1)
-        fecha_fin = fecha_inicio
-        st.rerun()
-    
-    if st.button("📅 Semana actual", use_container_width=True):
-        hoy = datetime.now().date()
-        dias_desde_lunes = hoy.weekday()
-        fecha_inicio = hoy - timedelta(days=dias_desde_lunes)
-        fecha_fin = hoy
-        st.rerun()
-    
-    if st.button("📅 Mes actual", use_container_width=True):
-        hoy = datetime.now().date()
-        fecha_inicio = hoy.replace(day=1)
-        fecha_fin = hoy
-        st.rerun()
-    
-    st.divider()
-    st.subheader("📁 Archivos")
-    
-    uploaded_files = {}
-    
-    # Power BI
-    with st.expander("📊 Power BI resources.xlsx", expanded=True):
-        uploaded_files['powerbi'] = st.file_uploader(
-            "Power BI resources.xlsx (Names)",
-            type=['xlsx'],
-            key="powerbi",
-            label_visibility="collapsed"
-        )
-    
-    # Template_Novedades_RRHH_MAX - UN SOLO ARCHIVO
-    with st.expander("📋 Template_Novedades_RRHH_MAX", expanded=True):
-        st.info("📌 **Un solo archivo con dos hojas:**\n- **Novedades**: Permisos generales\n- **Novedades 2**: Sábados y festivos")
-        
-        archivo_novedades = st.file_uploader(
-            "Template_Novedades_RRHH_MAX 1 1 2.xlsx",
-            type=['xlsx'],
-            key="novedades_max",
-            label_visibility="collapsed"
-        )
-        
-        if archivo_novedades:
-            st.success("✅ Archivo cargado correctamente")
-            uploaded_files['novedades_max'] = archivo_novedades
-            uploaded_files['novedades_max_2'] = archivo_novedades
-    
-    # Plataformas
-    with st.expander("🏛️ Camp Legal", expanded=False):
-        uploaded_files['camp_legal'] = st.file_uploader(
-            "Reporte Diario Camp Legal.xlsx",
-            type=['xlsx'],
-            key="camp_legal",
-            label_visibility="collapsed"
-        )
-    
-    with st.expander("📋 Smokeball", expanded=False):
-        uploaded_files['smokeball'] = st.file_uploader(
-            "Reporte_general.xlsx",
-            type=['xlsx'],
-            key="smokeball",
-            label_visibility="collapsed"
-        )
-    
-    with st.expander("⏱️ Toggl", expanded=False):
-        uploaded_files['toggl'] = st.file_uploader(
-            "Revision de entradas de tiempo - Toggl.xlsx",
-            type=['xlsx'],
-            key="toggl",
-            label_visibility="collapsed"
-        )
-    
-    # Novedades CLG
-    with st.expander("📋 Template_Novedades_RRHH_CLG", expanded=False):
-        uploaded_files['novedades_clg'] = st.file_uploader(
-            "Template_Novedades_RRHH_CLG - last.xlsx",
-            type=['xlsx'],
-            key="novedades_clg",
-            label_visibility="collapsed"
-        )
-    
-    st.divider()
-    
-    archivos_cargados = sum([1 for v in uploaded_files.values() if v is not None])
-    
-    # Verificar archivos obligatorios
-    obligatorios = ['powerbi', 'novedades_max']
-    obligatorios_cargados = sum([1 for k in obligatorios if uploaded_files.get(k) is not None])
-    
-    st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/6")
-    st.markdown(f"**✅ Obligatorios:** {obligatorios_cargados}/2 (Power BI + Novedades MAX)")
-    
-    procesar = st.button(
-        "🚀 Generar Reporte",
-        type="primary",
-        use_container_width=True,
-        disabled=obligatorios_cargados < 2
-    )
-
-# ============================================================
-# ÁREA PRINCIPAL
-# ============================================================
-
-if not procesar:
-    st.info("👈 Sube los archivos requeridos (Power BI y Novedades MAX) y presiona 'Generar Reporte'")
-    
-    st.markdown("### 📋 Archivos requeridos")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""
-        **✅ Obligatorios:**
-        - 📊 Power BI resources.xlsx
-        - 📋 Template_Novedades_RRHH_MAX (con 2 hojas)
-        """)
-    with col2:
-        st.markdown("""
-        **📌 Plataformas (al menos una):**
-        - 🏛️ Camp Legal
-        - 📋 Smokeball
-        - ⏱️ Toggl
-        """)
-    with col3:
-        st.markdown("""
-        **📋 Opcionales:**
-        - Template_Novedades_RRHH_CLG
-        """)
-    
-    st.markdown("---")
-    st.markdown("""
-    <div class="info-box">
-        <strong>💡 Nota:</strong> El reporte solo mostrará usuarios que aparecen en <strong>Novedades 2</strong> (hoja del mismo archivo).
-        Los usuarios que no están en Novedades 2 están descansando y no aparecerán.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style="background: #eafaf1; border: 1px solid #a9dfbf; padding: 12px 16px; border-radius: 10px;">
-        <strong>📋 Estructura del archivo Template_Novedades_RRHH_MAX:</strong><br>
-        • <strong>Hoja "Novedades":</strong> Permisos generales (columnas: Persona, Fecha Inicio, Fecha Fin, Tipo de Novedad)<br>
-        • <strong>Hoja "Novedades 2":</strong> Sábados y festivos (columnas: Persona, Fecha, Tipo de Novedad)
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-# ============================================================
-# PROCESAR REPORTE
-# ============================================================
-
-with st.spinner("🔄 Procesando datos... Por favor espera"):
-    try:
-        # Inicializar procesador
-        procesador = ReporteTiemposSystem(fecha_inicio, fecha_fin)
-        
-        # Cargar archivos
-        for key, file in uploaded_files.items():
-            if file is not None:
-                if key == 'novedades_max':
-                    # Cargar hoja Novedades
-                    procesador.cargar_archivo(file, 'novedades_max', sheet_name='Novedades')
-                    # Cargar hoja Novedades 2
-                    procesador.cargar_archivo(file, 'novedades_max_2', sheet_name='Novedades 2')
-                else:
-                    procesador.cargar_archivo(file, key)
-        
-        # Construir mapa de nombres
-        if not procesador.construir_mapa_nombres():
-            st.error("❌ Error al construir mapa de nombres. Verifica el archivo Power BI Resources.")
-            st.stop()
-        
-        # Procesar novedades
-        procesador.procesar_novedades()
-        
-        # Verificar usuarios en Novedades 2
-        if not procesador.usuarios_novedades_2:
-            st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
-            st.info("💡 Todos los usuarios están descansando en este período.")
-            st.stop()
-        
-        # Consolidar resultados
-        if not procesador.consolidar():
-            st.error("❌ Error al consolidar datos.")
-            st.stop()
-        
-        # Obtener resultados
-        df_resultados = procesador.obtener_resultados()
+        df_resultados = procesador.df_analisis
         estadisticas = procesador.get_estadisticas()
         
         if df_resultados is None or df_resultados.empty:
             st.warning("⚠️ No se encontraron resultados para el rango seleccionado.")
             st.stop()
-        
-        # ============================================================
-        # MOSTRAR RESULTADOS
-        # ============================================================
         
         st.markdown("---")
         st.markdown("### 📊 Resultados del Reporte")
@@ -1013,32 +461,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             hide_index=True
         )
         
-        # Información adicional
-        st.markdown("---")
-        st.markdown("### 📋 Información Adicional")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="info-box">
-                <strong>📊 Jornada total esperada:</strong> {procesador.jornada_total_esperada:.0f}h<br>
-                <strong>📅 Días hábiles:</strong> {procesador.dias_habiles}<br>
-                <strong>📋 Usuarios en Novedades 2:</strong> {len(procesador.usuarios_novedades_2)}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="success-box">
-                <strong>✅ Resumen:</strong><br>
-                • {estadisticas['total_usuarios']} usuarios con turno<br>
-                • {estadisticas['total_horas']:.1f} horas totales<br>
-                • Promedio de {estadisticas['promedio']:.1f} horas por usuario
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Descargar resultados
+        # Descargar
         st.markdown("### 📥 Exportar")
         
         csv = df_resultados.to_csv(index=False).encode('utf-8')
@@ -1057,17 +480,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_resultados.to_excel(writer, sheet_name='Reporte', index=False)
-                # Agregar hoja de resumen
-                resumen = pd.DataFrame([
-                    {'Metrica': 'Total Usuarios', 'Valor': estadisticas['total_usuarios']},
-                    {'Metrica': 'Total Horas', 'Valor': estadisticas['total_horas']},
-                    {'Metrica': 'Promedio', 'Valor': estadisticas['promedio']},
-                    {'Metrica': 'Con Permiso', 'Valor': estadisticas['con_permiso']},
-                    {'Metrica': 'Horas Camp Legal', 'Valor': estadisticas['horas_camp']},
-                    {'Metrica': 'Horas Smokeball', 'Valor': estadisticas['horas_sb']},
-                    {'Metrica': 'Horas Toggl', 'Valor': estadisticas['horas_tg']}
-                ])
-                resumen.to_excel(writer, sheet_name='Resumen', index=False)
             output.seek(0)
             
             st.download_button(
@@ -1079,16 +491,5 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             )
         
     except Exception as e:
-        st.error(f"❌ Error al procesar el reporte: {e}")
+        st.error(f"❌ Error: {e}")
         st.exception(e)
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #95a5a6; font-size: 12px; padding: 20px 0;">
-    Reporte generado automáticamente · Datos de Camp Legal, Smokeball y Toggl
-</div>
-""", unsafe_allow_html=True)
