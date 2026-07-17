@@ -1,3 +1,5 @@
+# app.py - Reporte de Tiempos para Streamlit (Versión con Diagnóstico)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -21,7 +23,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN (DE TU CÓDIGO ORIGINAL)
+# FUNCIONES DE CONVERSIÓN
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -131,22 +133,15 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
         return None
 
 def es_festivo(fecha):
-    """Determina si una fecha es festivo"""
     festivos = [
-        (1, 1),   # Año Nuevo
-        (5, 1),   # Día del Trabajo
-        (7, 20),  # Día de la Independencia
-        (8, 7),   # Batalla de Boyacá
-        (12, 8),  # Día de la Inmaculada Concepción
-        (12, 25), # Navidad
+        (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
     ]
     return (fecha.month, fecha.day) in festivos
 
 def get_jornada_esperada_por_dia(fecha):
-    """Retorna la jornada esperada para un día específico"""
-    if fecha.weekday() == 5:  # Sábado
+    if fecha.weekday() == 5:
         return 4.0
-    elif fecha.weekday() == 6:  # Domingo
+    elif fecha.weekday() == 6:
         return 0.0
     elif es_festivo(fecha):
         return 0.0
@@ -154,7 +149,7 @@ def get_jornada_esperada_por_dia(fecha):
         return 8.0
 
 # ============================================================
-# CONFIGURACIÓN DE COLUMNAS (DE TU CÓDIGO ORIGINAL)
+# CONFIGURACIÓN DE COLUMNAS
 # ============================================================
 
 COLUMNAS_MAPEO = {
@@ -240,7 +235,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PROCESADOR (TU CÓDIGO ORIGINAL ADAPTADO)
+# CLASE PROCESADOR
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -282,18 +277,7 @@ class ReporteTiemposSystem:
             fecha_actual += timedelta(days=1)
         return max(total, 1)
     
-    def _obtener_dias_con_jornada(self):
-        dias = []
-        fecha_actual = self.fecha_inicio
-        while fecha_actual <= self.fecha_fin:
-            jornada = get_jornada_esperada_por_dia(fecha_actual)
-            if jornada > 0:
-                dias.append((fecha_actual, jornada))
-            fecha_actual += timedelta(days=1)
-        return dias
-    
     def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
-        """Carga un archivo desde bytes (Streamlit)"""
         try:
             if sheet_name:
                 df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
@@ -397,7 +381,7 @@ class ReporteTiemposSystem:
     def procesar_novedades(self):
         novedades_list = []
         
-        # Novedades MAX (hoja Novedades - permisos generales)
+        # Novedades MAX (hoja Novedades)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -411,7 +395,7 @@ class ReporteTiemposSystem:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
         
-        # Novedades MAX 2 (hoja Novedades 2 - sábados y festivos)
+        # Novedades MAX 2 (hoja Novedades 2 - Sábados y festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -645,7 +629,7 @@ class ReporteTiemposSystem:
         }
 
 # ============================================================
-# INTERFAZ DE USUARIO - STREAMLIT
+# ESTILOS CSS
 # ============================================================
 
 st.markdown("""
@@ -658,16 +642,8 @@ st.markdown("""
         margin-bottom: 2rem;
         box-shadow: 0 4px 15px rgba(26,58,92,0.3);
     }
-    .main-header h1 {
-        margin: 0;
-        font-size: 2rem;
-        font-weight: 700;
-    }
-    .main-header p {
-        margin: 0.3rem 0 0 0;
-        opacity: 0.85;
-        font-size: 1rem;
-    }
+    .main-header h1 { margin: 0; font-size: 2rem; font-weight: 700; }
+    .main-header p { margin: 0.3rem 0 0 0; opacity: 0.85; }
     .card-metric {
         background: white;
         padding: 1rem;
@@ -676,24 +652,13 @@ st.markdown("""
         text-align: center;
         border-top: 4px solid #2c5f8a;
     }
-    .card-metric .value {
-        font-size: 28px;
-        font-weight: 800;
-        color: #1a3a5c;
-    }
-    .card-metric .label {
-        font-size: 11px;
-        text-transform: uppercase;
-        color: #7a8a9e;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-    }
+    .card-metric .value { font-size: 28px; font-weight: 800; color: #1a3a5c; }
+    .card-metric .label { font-size: 11px; text-transform: uppercase; color: #7a8a9e; font-weight: 600; }
     .info-box {
         background: #fef9e7;
         border: 1px solid #f9e79f;
         padding: 12px 16px;
         border-radius: 10px;
-        margin: 10px 0;
         color: #7d6608;
     }
     .success-box {
@@ -703,12 +668,12 @@ st.markdown("""
         border-radius: 10px;
         color: #1a7a42;
     }
-    .upload-area {
-        border: 2px dashed #bdc3c7;
+    .diagnostico-box {
+        background: #f0f4f8;
+        border: 1px solid #d5dbe0;
+        padding: 12px 16px;
         border-radius: 10px;
-        padding: 0.5rem;
-        margin: 0.3rem 0;
-        background: #fafbfc;
+        margin: 10px 0;
     }
     .stButton > button {
         background-color: #1a3a5c;
@@ -722,7 +687,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Header
+# ============================================================
+# HEADER
+# ============================================================
+
 st.markdown("""
 <div class="main-header">
     <h1>📊 Reporte de Tiempos</h1>
@@ -730,7 +698,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# ============================================================
+# SIDEBAR
+# ============================================================
+
 with st.sidebar:
     st.header("⚙️ Configuración")
     
@@ -774,9 +745,11 @@ with st.sidebar:
     st.divider()
     st.subheader("📁 Archivos")
     
+    # Diccionario para almacenar archivos
+    uploaded_files = {}
+    
     # Power BI
     with st.expander("📊 Power BI resources.xlsx", expanded=True):
-        uploaded_files = {}
         uploaded_files['powerbi'] = st.file_uploader(
             "Power BI resources.xlsx (Names)",
             type=['xlsx'],
@@ -797,7 +770,7 @@ with st.sidebar:
         
         if archivo_novedades:
             st.success("✅ Archivo cargado correctamente")
-            # Cargar ambas hojas
+            # Guardar el mismo archivo para ambas hojas
             uploaded_files['novedades_max'] = archivo_novedades
             uploaded_files['novedades_max_2'] = archivo_novedades
     
@@ -840,7 +813,7 @@ with st.sidebar:
     archivos_cargados = sum([1 for v in uploaded_files.values() if v is not None])
     
     # Verificar archivos obligatorios
-    obligatorios = ['powerbi', 'novedades_max']  # Novedades MAX es un solo archivo
+    obligatorios = ['powerbi', 'novedades_max']
     obligatorios_cargados = sum([1 for k in obligatorios if uploaded_files.get(k) is not None])
     
     st.markdown(f"**📁 Archivos cargados:** {archivos_cargados}/6")
@@ -853,7 +826,10 @@ with st.sidebar:
         disabled=obligatorios_cargados < 2
     )
 
-# Área principal
+# ============================================================
+# ÁREA PRINCIPAL
+# ============================================================
+
 if not procesar:
     st.info("👈 Sube los archivos requeridos (Power BI y Novedades MAX) y presiona 'Generar Reporte'")
     
@@ -896,29 +872,108 @@ if not procesar:
     """, unsafe_allow_html=True)
     st.stop()
 
-# Procesar reporte
+# ============================================================
+# PROCESAR REPORTE
+# ============================================================
+
 with st.spinner("🔄 Procesando datos... Por favor espera"):
     try:
         # Inicializar procesador
         procesador = ReporteTiemposSystem(fecha_inicio, fecha_fin)
         
-        # Cargar archivos
-        for key, file in uploaded_files.items():
-            if file is not None:
-                # Para Novedades MAX, cargar ambas hojas
-                if key == 'novedades_max':
-                    procesador.cargar_archivo(file, 'novedades_max', sheet_name='Novedades')
-                    procesador.cargar_archivo(file, 'novedades_max_2', sheet_name='Novedades 2')
-                else:
-                    procesador.cargar_archivo(file, key)
+        # ============================================================
+        # DIAGNÓSTICO - Carga de archivos
+        # ============================================================
+        
+        st.markdown("---")
+        st.markdown("### 🔍 Diagnóstico de Carga")
+        
+        # Power BI
+        if uploaded_files.get('powerbi') is not None:
+            st.write("📖 **Cargando Power BI...**")
+            procesador.cargar_archivo(uploaded_files['powerbi'], 'powerbi')
+            st.success(f"✅ Power BI: {len(procesador.df_powerbi)} registros")
+            st.write(f"   Columnas: {list(procesador.df_powerbi.columns)}")
+        
+        # Novedades MAX - UN SOLO ARCHIVO CON DOS HOJAS
+        if uploaded_files.get('novedades_max') is not None:
+            st.write("📖 **Cargando Template_Novedades_RRHH_MAX...**")
+            
+            # Cargar hoja Novedades
+            try:
+                df_novedades = pd.read_excel(uploaded_files['novedades_max'], sheet_name='Novedades')
+                procesador.df_novedades_max = df_novedades
+                st.success(f"✅ Novedades (hoja 1): {len(df_novedades)} registros")
+                st.write(f"   Columnas: {list(df_novedades.columns)}")
+                
+                # Mostrar muestra
+                if len(df_novedades) > 0:
+                    st.write("📊 **Muestra de Novedades:**")
+                    st.dataframe(df_novedades.head(5))
+            except Exception as e:
+                st.error(f"❌ Error cargando hoja 'Novedades': {e}")
+                st.stop()
+            
+            # Cargar hoja Novedades 2
+            try:
+                df_novedades_2 = pd.read_excel(uploaded_files['novedades_max'], sheet_name='Novedades 2')
+                procesador.df_novedades_max_2 = df_novedades_2
+                st.success(f"✅ Novedades 2 (hoja 2): {len(df_novedades_2)} registros")
+                st.write(f"   Columnas: {list(df_novedades_2.columns)}")
+                
+                # Mostrar muestra
+                if len(df_novedades_2) > 0:
+                    st.write("📊 **Muestra de Novedades 2:**")
+                    st.dataframe(df_novedades_2.head(5))
+                    
+                    # Verificar si hay datos en el rango de fechas
+                    if 'Fecha' in df_novedades_2.columns:
+                        try:
+                            fechas = pd.to_datetime(df_novedades_2['Fecha'])
+                            registros_rango = len(fechas[
+                                (fechas >= pd.Timestamp(fecha_inicio)) & 
+                                (fechas <= pd.Timestamp(fecha_fin))
+                            ])
+                            st.write(f"📅 Registros en el rango de fechas: {registros_rango}")
+                        except:
+                            st.warning("⚠️ No se pudieron procesar las fechas")
+            except Exception as e:
+                st.error(f"❌ Error cargando hoja 'Novedades 2': {e}")
+                st.stop()
+        
+        # Plataformas
+        for key in ['camp_legal', 'smokeball', 'toggl']:
+            if uploaded_files.get(key) is not None:
+                st.write(f"📖 **Cargando {key}...**")
+                procesador.cargar_archivo(uploaded_files[key], key)
+                df = getattr(procesador, f"df_{key}", None)
+                if df is not None:
+                    st.success(f"✅ {key}: {len(df)} registros")
+                    if len(df) > 0:
+                        st.write(f"   Columnas: {list(df.columns)}")
+        
+        st.divider()
+        st.markdown("### 🔄 Procesando datos...")
         
         # Construir mapa de nombres
+        st.write("📖 **Construyendo mapa de nombres...**")
         if not procesador.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica el archivo Power BI Resources.")
             st.stop()
+        st.success("✅ Mapa de nombres construido")
         
         # Procesar novedades
+        st.write("📖 **Procesando novedades...**")
         procesador.procesar_novedades()
+        st.success(f"✅ Usuarios en Novedades 2 en el rango: {len(procesador.usuarios_novedades_2)}")
+        
+        # Mostrar usuarios de Novedades 2
+        if procesador.usuarios_novedades_2:
+            with st.expander("📋 Usuarios en Novedades 2"):
+                for usuario in sorted(procesador.usuarios_novedades_2)[:20]:
+                    st.write(f"• {usuario}")
+                if len(procesador.usuarios_novedades_2) > 20:
+                    st.write(f"... y {len(procesador.usuarios_novedades_2) - 20} más")
         
         # Verificar usuarios en Novedades 2
         if not procesador.usuarios_novedades_2:
@@ -927,9 +982,11 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.stop()
         
         # Consolidar resultados
+        st.write("📖 **Consolidando resultados...**")
         if not procesador.consolidar():
             st.error("❌ Error al consolidar datos.")
             st.stop()
+        st.success("✅ Datos consolidados")
         
         # Obtener resultados
         df_resultados = procesador.obtener_resultados()
@@ -1084,19 +1141,15 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_resultados.to_excel(writer, sheet_name='Reporte', index=False)
                 # Agregar hoja de resumen
-                resumen = pd.DataFrame([{
-                    'Metrica': 'Total Usuarios',
-                    'Valor': estadisticas['total_usuarios']
-                }, {
-                    'Metrica': 'Total Horas',
-                    'Valor': estadisticas['total_horas']
-                }, {
-                    'Metrica': 'Promedio',
-                    'Valor': estadisticas['promedio']
-                }, {
-                    'Metrica': 'Con Permiso',
-                    'Valor': estadisticas['con_permiso']
-                }])
+                resumen = pd.DataFrame([
+                    {'Metrica': 'Total Usuarios', 'Valor': estadisticas['total_usuarios']},
+                    {'Metrica': 'Total Horas', 'Valor': estadisticas['total_horas']},
+                    {'Metrica': 'Promedio', 'Valor': estadisticas['promedio']},
+                    {'Metrica': 'Con Permiso', 'Valor': estadisticas['con_permiso']},
+                    {'Metrica': 'Horas Camp Legal', 'Valor': estadisticas['horas_camp']},
+                    {'Metrica': 'Horas Smokeball', 'Valor': estadisticas['horas_sb']},
+                    {'Metrica': 'Horas Toggl', 'Valor': estadisticas['horas_tg']}
+                ])
                 resumen.to_excel(writer, sheet_name='Resumen', index=False)
             output.seek(0)
             
@@ -1112,7 +1165,10 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         st.error(f"❌ Error al procesar el reporte: {e}")
         st.exception(e)
 
-# Footer
+# ============================================================
+# FOOTER
+# ============================================================
+
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #95a5a6; font-size: 12px; padding: 20px 0;">
