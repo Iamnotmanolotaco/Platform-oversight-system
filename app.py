@@ -668,7 +668,7 @@ class ReporteTiemposSystem:
             for dia, horas in data['Detalle_Diario'].items():
                 jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
                 
-                # Verificar si incumple (menos de la jornada esperada y > 0 horas o 0 horas)
+                # Verificar si incumple (menos de la jornada esperada)
                 if horas < jornada_esperada:
                     # Extraer la fecha del dia (formato "Dia_XX/XX")
                     fecha_str = dia.replace('Dia_', '')
@@ -1099,7 +1099,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             """, unsafe_allow_html=True)
         
         # ============================================================
-        # TABLA CON COLOR ROJO PARA INCUMPLIMIENTO
+        # TABLA CON COLOR ROJO PARA INCUMPLIMIENTO (CORREGIDO)
         # ============================================================
         
         st.markdown("### 👥 Detalle por Usuario")
@@ -1115,21 +1115,12 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             'Total Horas', 'Días Activos', 'Permiso', 'Estado', '⚠️ Incumple', 'Detalle Incumplimiento'
         ]
         
-        # Función para colorear filas
-        def color_incumplimiento(val):
-            if val == True:
-                return 'background-color: #ffcccc; color: #c0392b; font-weight: bold;'
-            return ''
+        # Convertir la columna de incumplimiento a texto para mejor visualización
+        df_mostrar['⚠️ Incumple'] = df_mostrar['⚠️ Incumple'].apply(lambda x: '🚨 SÍ' if x else '✅ NO')
         
-        # Aplicar estilo a la columna de incumplimiento
-        styled_df = df_mostrar.style.applymap(
-            color_incumplimiento, 
-            subset=[ 'Incumple']
-        )
-        
-        # Mostrar tabla con estilo
+        # Mostrar tabla simple
         st.dataframe(
-            styled_df,
+            df_mostrar,
             use_container_width=True,
             height=400,
             hide_index=True
@@ -1187,7 +1178,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             mostrar_solo_incumplidores = st.checkbox("Mostrar solo usuarios que incumplen")
             if mostrar_solo_incumplidores:
                 st.dataframe(
-                    df_mostrar[df_mostrar['⚠️ Incumple'] == True],
+                    df_mostrar[df_mostrar['⚠️ Incumple'] == '🚨 SÍ'],
                     use_container_width=True,
                     hide_index=True
                 )
