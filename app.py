@@ -1,4 +1,4 @@
-# app.py - VERSIÓN COMPLETA CON HOJAS CORRECTAS
+# app.py - REPORTE DE TIEMPOS CON VALIDACIÓN DE INCUMPLIMIENTO (COLOR ROJO)
 
 import streamlit as st
 import pandas as pd
@@ -140,14 +140,23 @@ def es_festivo(fecha):
     return (fecha.month, fecha.day) in festivos
 
 def get_jornada_esperada_por_dia(fecha):
-    if fecha.weekday() == 5:
+    """Retorna la jornada esperada para un día específico"""
+    if fecha.weekday() == 5:  # Sábado
         return 4.0
-    elif fecha.weekday() == 6:
+    elif fecha.weekday() == 6:  # Domingo
         return 0.0
     elif es_festivo(fecha):
         return 0.0
     else:
         return 8.0
+
+def es_sabado(fecha_str):
+    """Verifica si una fecha es sábado a partir de un string DD/MM"""
+    try:
+        dia_obj = datetime.strptime(fecha_str, '%d/%m')
+        return dia_obj.weekday() == 5
+    except:
+        return False
 
 # ============================================================
 # MAPEO DE COLUMNAS (EXACTAMENTE IGUAL A TU v33)
@@ -236,7 +245,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL - TU CÓDIGO v33 EXACTO
+# CLASE PRINCIPAL - TU CÓDIGO v33 CON VALIDACIÓN DE INCUMPLIMIENTO
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -649,6 +658,37 @@ class ReporteTiemposSystem:
             total = data['Camp Legal'] + data['Smokeball'] + data['Toggl']
             porcentaje = (total / self.jornada_total_esperada * 100) if self.jornada_total_esperada > 0 else 0
             
+            # ============================================================
+            # VALIDACIÓN DE INCUMPLIMIENTO POR DÍA
+            # ============================================================
+            
+            incumplimiento_diario = []
+            dias_incumplidos = []
+            
+            for dia, horas in data['Detalle_Diario'].items():
+                jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
+                
+                # Verificar si incumple (menos de la jornada esperada y > 0 horas o 0 horas)
+                if horas < jornada_esperada:
+                    # Extraer la fecha del dia (formato "Dia_XX/XX")
+                    fecha_str = dia.replace('Dia_', '')
+                    try:
+                        dia_obj = datetime.strptime(fecha_str, '%d/%m').replace(year=self.fecha_inicio.year)
+                        # Verificar si es sábado (weekday = 5)
+                        es_sabado = dia_obj.weekday() == 5
+                        if es_sabado:
+                            incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (esperado 4h) ❌")
+                            dias_incumplidos.append(dia)
+                        else:
+                            incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (esperado 8h) ❌")
+                            dias_incumplidos.append(dia)
+                    except:
+                        incumplimiento_diario.append(f"{dia}: {horas:.1f}h ❌")
+                        dias_incumplidos.append(dia)
+            
+            # Determinar si el usuario tiene incumplimiento
+            tiene_incumplimiento = len(dias_incumplidos) > 0
+            
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
@@ -658,7 +698,11 @@ class ReporteTiemposSystem:
             for dia, horas in data['Detalle_Diario'].items():
                 if horas > 0:
                     jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
-                    detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h)")
+                    # Marcar con asterisco si incumple
+                    if horas < jornada_esperada:
+                        detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h) ⚠️")
+                    else:
+                        detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h)")
             detalle_str = ' | '.join(detalle_items)
             
             datos.append({
@@ -674,11 +718,27 @@ class ReporteTiemposSystem:
                 'Estado': estado,
                 'Porcentaje': round(porcentaje, 1),
                 'Detalle_Diario': detalle_str,
+                'Incumplimiento': tiene_incumplimiento,
+                'Incumplimiento_Detalle': ' | '.join(incumplimiento_diario) if incumplimiento_diario else '✅ Todo ok',
+                'Dias_Incumplidos': len(dias_incumplidos),
                 'Plataformas_Activas': sum([1 for x in [data['Camp Legal'], data['Smokeball'], data['Toggl']] if x > 0])
             })
         
         self.df_analisis = pd.DataFrame(datos)
+        
+        # Ordenar por incumplimiento (los que incumplen primero)
+        if len(self.df_analisis) > 0:
+            self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
+        
         print(f"\n✅ Usuarios en reporte: {len(self.df_analisis)}")
+        
+        # Mostrar resumen de incumplimientos
+        incumplidores = self.df_analisis[self.df_analisis['Incumplimiento'] == True]
+        if len(incumplidores) > 0:
+            print(f"⚠️ Usuarios con incumplimiento: {len(incumplidores)}")
+            for _, row in incumplidores.iterrows():
+                print(f"   • {row['Usuario']}: {row['Incumplimiento_Detalle']}")
+        
         return True
     
     def calcular_estado_rango(self, total, camp, sb, tg, porcentaje):
@@ -719,7 +779,8 @@ class ReporteTiemposSystem:
                 'con_permiso': 0,
                 'horas_camp': 0,
                 'horas_sb': 0,
-                'horas_tg': 0
+                'horas_tg': 0,
+                'incumplidores': 0
             }
         
         df = self.df_analisis
@@ -730,7 +791,8 @@ class ReporteTiemposSystem:
             'con_permiso': len(df[df['Permiso'] != 'Sin permiso']),
             'horas_camp': df['Camp Legal'].sum(),
             'horas_sb': df['Smokeball'].sum(),
-            'horas_tg': df['Toggl'].sum()
+            'horas_tg': df['Toggl'].sum(),
+            'incumplidores': len(df[df['Incumplimiento'] == True])
         }
 
 # ============================================================
@@ -758,6 +820,22 @@ st.markdown("""
     }
     .card-metric .value { font-size: 28px; font-weight: 800; color: #1a3a5c; }
     .card-metric .label { font-size: 11px; text-transform: uppercase; color: #7a8a9e; }
+    .card-metric.danger { border-top-color: #e74c3c; }
+    .card-metric.danger .value { color: #e74c3c; }
+    .card-metric.success { border-top-color: #27ae60; }
+    .card-metric.success .value { color: #27ae60; }
+    .tag {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 700;
+        color: white;
+        margin: 1px 2px;
+    }
+    .tag-danger { background: #e74c3c; }
+    .tag-success { background: #27ae60; }
+    .tag-warning { background: #f39c12; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -960,16 +1038,23 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.stop()
         
         # ============================================================
-        # MOSTRAR RESULTADOS
+        # MOSTRAR RESULTADOS CON COLOR ROJO PARA INCUMPLIMIENTO
         # ============================================================
         
         st.markdown("---")
         st.markdown("### 📊 Resultados del Reporte")
         
+        # Contar incumplidores
+        incumplidores = df_resultados[df_resultados['Incumplimiento'] == True]
+        if len(incumplidores) > 0:
+            st.error(f"🚨 {len(incumplidores)} usuarios NO cumplieron con la jornada mínima")
+        else:
+            st.success("✅ Todos los usuarios cumplieron con la jornada mínima")
+        
         st.info(f"📋 Usuarios en Novedades 2: {len(sistema.usuarios_novedades_2)} personas deben marcar tiempo")
         
         # KPIs
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.markdown(f"""
@@ -1003,39 +1088,114 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             </div>
             """, unsafe_allow_html=True)
         
-        # Plataformas
-        st.markdown("### 📈 Distribución por Plataforma")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
+        with col5:
+            # Mostrar incumplidores en rojo
+            color = "#e74c3c" if estadisticas['incumplidores'] > 0 else "#27ae60"
             st.markdown(f"""
-            <div class="card-metric" style="border-top-color: #3498db;">
-                <div class="value" style="color: #3498db;">{estadisticas['horas_camp']:.1f}h</div>
-                <div class="label">🏛️ Camp Legal</div>
+            <div class="card-metric danger" style="border-top-color: {color};">
+                <div class="value" style="color: {color};">{estadisticas['incumplidores']}</div>
+                <div class="label">🚨 Incumplen</div>
             </div>
             """, unsafe_allow_html=True)
         
-        with col2:
-            st.markdown(f"""
-            <div class="card-metric" style="border-top-color: #2ecc71;">
-                <div class="value" style="color: #2ecc71;">{estadisticas['horas_sb']:.1f}h</div>
-                <div class="label">📋 Smokeball</div>
-            </div>
-            """, unsafe_allow_html=True)
+        # ============================================================
+        # TABLA CON COLOR ROJO PARA INCUMPLIMIENTO
+        # ============================================================
         
-        with col3:
-            st.markdown(f"""
-            <div class="card-metric" style="border-top-color: #e67e22;">
-                <div class="value" style="color: #e67e22;">{estadisticas['horas_tg']:.1f}h</div>
-                <div class="label">⏱️ Toggl</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Tabla
         st.markdown("### 👥 Detalle por Usuario")
-        st.dataframe(df_resultados, use_container_width=True, hide_index=True)
         
-        # Descargar
+        # Crear una columna de estilo para la tabla
+        df_mostrar = df_resultados[[
+            'Usuario', 'Camp Legal', 'Smokeball', 'Toggl', 
+            'Total_Horas', 'Dias_Activos', 'Permiso', 'Estado', 'Incumplimiento', 'Incumplimiento_Detalle'
+        ]].copy()
+        
+        df_mostrar.columns = [
+            'Usuario', 'Camp Legal', 'Smokeball', 'Toggl',
+            'Total Horas', 'Días Activos', 'Permiso', 'Estado', '⚠️ Incumple', 'Detalle Incumplimiento'
+        ]
+        
+        # Función para colorear filas
+        def color_incumplimiento(val):
+            if val == True:
+                return 'background-color: #ffcccc; color: #c0392b; font-weight: bold;'
+            return ''
+        
+        # Aplicar estilo a la columna de incumplimiento
+        styled_df = df_mostrar.style.applymap(
+            color_incumplimiento, 
+            subset=['⚠️ Incumple']
+        )
+        
+        # Mostrar tabla con estilo
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+        
+        # ============================================================
+        # TARJETAS POR USUARIO CON COLOR ROJO
+        # ============================================================
+        
+        st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
+        
+        # Mostrar tarjetas con color según incumplimiento
+        cols = st.columns(3)
+        for idx, (_, row) in enumerate(df_resultados.iterrows()):
+            col = cols[idx % 3]
+            
+            # Determinar color de fondo
+            if row['Incumplimiento']:
+                bg_color = '#fdedec'  # Rojo claro
+                border_color = '#e74c3c'
+                icono = '🚨'
+            else:
+                bg_color = '#eafaf1'  # Verde claro
+                border_color = '#27ae60'
+                icono = '✅'
+            
+            with col:
+                st.markdown(f"""
+                <div style="
+                    background: {bg_color};
+                    border: 2px solid {border_color};
+                    border-radius: 10px;
+                    padding: 12px 16px;
+                    margin-bottom: 10px;
+                ">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <strong style="font-size: 14px;">{icono} {row['Usuario']}</strong>
+                        <span style="font-size: 18px; font-weight: 800; color: {border_color};">{row['Total_Horas']:.1f}h</span>
+                    </div>
+                    <div style="font-size: 12px; color: #555; margin-top: 4px;">
+                        CL: {row['Camp Legal']:.1f}h · SB: {row['Smokeball']:.1f}h · TG: {row['Toggl']:.1f}h
+                    </div>
+                    <div style="font-size: 11px; color: #888; margin-top: 2px;">
+                        📅 {row['Dias_Activos']} días activos · {row['Estado']}
+                    </div>
+                    {f'<div style="font-size: 11px; color: #c0392b; margin-top: 4px; font-weight: 600;">⚠️ {row["Incumplimiento_Detalle"]}</div>' if row['Incumplimiento'] else ''}
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # ============================================================
+        # FILTRO PARA VER SOLO INCUMPLIDORES
+        # ============================================================
+        
+        with st.expander("🔍 Filtros avanzados"):
+            mostrar_solo_incumplidores = st.checkbox("Mostrar solo usuarios que incumplen")
+            if mostrar_solo_incumplidores:
+                st.dataframe(
+                    df_mostrar[df_mostrar['⚠️ Incumple'] == True],
+                    use_container_width=True,
+                    hide_index=True
+                )
+        
+        # ============================================================
+        # DESCARGAR RESULTADOS
+        # ============================================================
+        
         st.markdown("### 📥 Exportar")
         
         csv = df_resultados.to_csv(index=False).encode('utf-8')
