@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON TARJETAS Y DIAGNÓSTICO
+# app.py - VERSIÓN COMPLETA CON SOLUCIÓN PARA CRISTHIAN MEDINA Y OTROS USUARIOS
 
 import streamlit as st
 import pandas as pd
@@ -119,6 +119,26 @@ def limpiar_nombre(nombre):
     nombre = re.sub(r'\s+', ' ', nombre)
     
     return nombre.strip()
+
+def normalizar_nombre_flexible(nombre):
+    """Limpia y normaliza un nombre, incluyendo variaciones ortográficas comunes"""
+    if not isinstance(nombre, str):
+        return nombre
+    
+    nombre_limpio = limpiar_nombre(nombre.strip())
+    
+    # Reemplazar variaciones comunes
+    reemplazos = {
+        'medinha': 'medina',
+        'cristhian': 'cristian',
+    }
+    
+    nombre_lower = nombre_limpio.lower()
+    for incorrecto, correcto in reemplazos.items():
+        if incorrecto in nombre_lower:
+            nombre_limpio = nombre_limpio.replace(incorrecto, correcto)
+    
+    return nombre_limpio
 
 def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
     if pd.isna(valor):
@@ -281,12 +301,15 @@ class ReporteTiemposSystem:
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
         self.df_permisos_por_dia = None
+        self.usuarios_manuales = set()  # Usuarios agregados manualmente
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
-        self.diagnostico = {}
+        print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
+        print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
+        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
     
     def _calcular_dias_habiles(self):
         dias = 0
@@ -345,7 +368,7 @@ class ReporteTiemposSystem:
         if not isinstance(nombre, str):
             return nombre
         
-        nombre_limpio = limpiar_nombre(nombre.strip())
+        nombre_limpio = normalizar_nombre_flexible(nombre.strip())
         if not nombre_limpio:
             return nombre_limpio
         
@@ -356,12 +379,15 @@ class ReporteTiemposSystem:
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
-        # Buscar coincidencia parcial
+        # Buscar coincidencia parcial (más flexible)
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
+            # Si el nombre limpio está contenido en el nombre de la plataforma
             if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
+            # Si el nombre de la plataforma está contenido en el nombre limpio
             if nombre_plat.lower() in nombre_limpio.lower():
                 return nombre_canon
+            # Si comparten la primera palabra (nombre)
             if ' ' in nombre_limpio and ' ' in nombre_plat:
                 if nombre_limpio.split()[0].lower() == nombre_plat.split()[0].lower():
                     return nombre_canon
@@ -415,7 +441,7 @@ class ReporteTiemposSystem:
             if not nombre_canonico:
                 continue
             
-            nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
+            nombre_canonico_limpio = normalizar_nombre_flexible(nombre_canonico)
             
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
@@ -434,7 +460,7 @@ class ReporteTiemposSystem:
             if col_cl in df_activos.columns and pd.notna(row[col_cl]):
                 valor = str(row[col_cl]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = limpiar_nombre(valor)
+                    valor_limpio = normalizar_nombre_flexible(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     partes = valor_limpio.split()
@@ -453,7 +479,7 @@ class ReporteTiemposSystem:
             if col_sb in df_activos.columns and pd.notna(row[col_sb]):
                 valor = str(row[col_sb]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = limpiar_nombre(valor)
+                    valor_limpio = normalizar_nombre_flexible(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     partes = valor_limpio.split()
@@ -472,7 +498,7 @@ class ReporteTiemposSystem:
             if col_tg in df_activos.columns and pd.notna(row[col_tg]):
                 valor = str(row[col_tg]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = limpiar_nombre(valor)
+                    valor_limpio = normalizar_nombre_flexible(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     partes = valor_limpio.split()
@@ -505,6 +531,69 @@ class ReporteTiemposSystem:
             if tiene_cl or tiene_sb or tiene_tg:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
         
+        # ============================================================
+        # AGREGAR USUARIOS MANUALMENTE (LOS QUE APARECEN EN PLATAFORMAS PERO NO EN POWER BI)
+        # ============================================================
+        
+        st.write("### 🔧 Agregando usuarios manualmente desde plataformas")
+        
+        # Obtener usuarios de Toggl
+        usuarios_toggl = set()
+        if self.df_toggl is not None and 'Member' in self.df_toggl.columns:
+            for nombre in self.df_toggl['Member'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre)
+                    if nombre_limpio:
+                        usuarios_toggl.add(nombre_limpio)
+        
+        # Obtener usuarios de Camp Legal
+        usuarios_camp = set()
+        if self.df_camp is not None and 'Staff Name' in self.df_camp.columns:
+            for nombre in self.df_camp['Staff Name'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre)
+                    if nombre_limpio:
+                        usuarios_camp.add(nombre_limpio)
+        
+        # Obtener usuarios de Smokeball
+        usuarios_sb = set()
+        if self.df_smokeball is not None and 'Name' in self.df_smokeball.columns:
+            for nombre in self.df_smokeball['Name'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre)
+                    if nombre_limpio:
+                        usuarios_sb.add(nombre_limpio)
+        
+        # Combinar todos los usuarios de plataformas
+        todos_usuarios_plataforma = usuarios_toggl.union(usuarios_camp).union(usuarios_sb)
+        
+        # Agregar al mapa de nombres y a usuarios_con_plataforma
+        agregados = 0
+        for usuario in todos_usuarios_plataforma:
+            if usuario and usuario not in self.mapa_nombres:
+                # Buscar si hay un nombre canónico similar
+                nombre_canon = None
+                for nombre_plat, nombre_canonico in self.mapa_nombres.items():
+                    if (usuario.lower() in nombre_plat.lower() or 
+                        nombre_plat.lower() in usuario.lower() or
+                        usuario.split()[0].lower() == nombre_plat.split()[0].lower() or
+                        usuario.split()[-1].lower() == nombre_plat.split()[-1].lower()):
+                        nombre_canon = nombre_canonico
+                        break
+                
+                if nombre_canon:
+                    self.mapa_nombres[usuario] = nombre_canon
+                else:
+                    self.mapa_nombres[usuario] = usuario
+                    if usuario not in self.usuarios_con_plataforma:
+                        self.usuarios_con_plataforma.append(usuario)
+                        self.usuarios_manuales.add(usuario)
+                        agregados += 1
+                        st.write(f"   ✅ Agregado: {usuario}")
+        
+        st.write(f"   Total usuarios agregados manualmente: {agregados}")
+        st.write(f"   Total usuarios en plataforma: {len(self.usuarios_con_plataforma)}")
+        
         return True
     
     def procesar_novedades(self):
@@ -515,7 +604,6 @@ class ReporteTiemposSystem:
         novedades_list = []
         permisos_por_dia = []
         
-        # NOVEDADES MAX (hoja 1)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -530,7 +618,6 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX (rango - permisos): {len(df_max_validos)} registros")
         
-        # NOVEDADES MAX 2 (hoja 2 - festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -566,7 +653,6 @@ class ReporteTiemposSystem:
             else:
                 print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
-        # NOVEDADES CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -1076,11 +1162,18 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Construir mapa de nombres
+        # Construir mapa de nombres (con inclusión manual de usuarios)
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
         st.success("✅ Mapa de nombres construido")
+        
+        # Mostrar usuarios agregados manualmente
+        if sistema.usuarios_manuales:
+            st.info(f"📋 Usuarios agregados manualmente: {len(sistema.usuarios_manuales)}")
+            with st.expander("📋 Usuarios agregados manualmente"):
+                for usuario in sorted(sistema.usuarios_manuales):
+                    st.write(f"• {usuario}")
         
         # Procesar novedades
         sistema.procesar_novedades()
@@ -1099,6 +1192,65 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         if df_resultados is None or df_resultados.empty:
             st.warning("⚠️ No se encontraron resultados")
             st.stop()
+        
+        # ============================================================
+        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS
+        # ============================================================
+        
+        with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
+            
+            usuarios_a_verificar = [
+                'Gustavo Meneses', 'Amber Spelman', 'Angelly Castañeda', 
+                'Cristhian Medina', 'Daniela Squires', 'Delmin Salazar',
+                'Diana Carolina Moise', 'Diego Londoño', 'Gabriel Taborda',
+                'Joseph Hamilton', 'Juan David Quintero', 'Laura Valentina Bonilla',
+                'Luisa Segura', 'Maria Camila Acosta', 'Maria Lucia Mage',
+                'Marion Garcia', 'Marisol Tinajero', 'Monica Lopez Villamizar',
+                'Perlita Avila Casulla', 'Victor Zarate'
+            ]
+            
+            st.write("### 🔍 Verificando usuarios específicos")
+            
+            for usuario in usuarios_a_verificar:
+                st.write(f"---")
+                st.write(f"**👤 {usuario}**")
+                
+                # Buscar en el reporte final
+                if df_resultados is not None and len(df_resultados) > 0:
+                    usuario_resultado = df_resultados[df_resultados['Usuario'].str.contains(usuario.split()[0], case=False, na=False)]
+                    if len(usuario_resultado) > 0:
+                        st.success(f"✅ Encontrado en el reporte final")
+                        st.dataframe(usuario_resultado[['Usuario', 'Total_Horas', 'Camp Legal', 'Smokeball', 'Toggl', 'Estado']])
+                    else:
+                        st.warning(f"❌ NO encontrado en el reporte final")
+                        
+                        # Buscar en cada plataforma
+                        # Toggl
+                        if sistema.df_toggl is not None and 'Member' in sistema.df_toggl.columns:
+                            tg_found = sistema.df_toggl[sistema.df_toggl['Member'].str.contains(usuario.split()[0], case=False, na=False)]
+                            if len(tg_found) > 0:
+                                horas = tg_found['Dur'].apply(convertir_hora_tiempo).sum()
+                                st.write(f"   Toggl: ✅ {horas:.2f} horas")
+                            else:
+                                st.write(f"   Toggl: ❌ No encontrado")
+                        
+                        # Camp Legal
+                        if sistema.df_camp is not None and 'Staff Name' in sistema.df_camp.columns:
+                            camp_found = sistema.df_camp[sistema.df_camp['Staff Name'].str.contains(usuario.split()[0], case=False, na=False)]
+                            if len(camp_found) > 0:
+                                horas = camp_found['Hours Spent'].apply(convertir_hora_tiempo).sum()
+                                st.write(f"   Camp Legal: ✅ {horas:.2f} horas")
+                            else:
+                                st.write(f"   Camp Legal: ❌ No encontrado")
+                        
+                        # Smokeball
+                        if sistema.df_smokeball is not None and 'Name' in sistema.df_smokeball.columns:
+                            sb_found = sistema.df_smokeball[sistema.df_smokeball['Name'].str.contains(usuario.split()[0], case=False, na=False)]
+                            if len(sb_found) > 0:
+                                horas = sb_found['Hours'].apply(convertir_hora_decimal).sum()
+                                st.write(f"   Smokeball: ✅ {horas:.2f} horas")
+                            else:
+                                st.write(f"   Smokeball: ❌ No encontrado")
         
         # ============================================================
         # MOSTRAR RESULTADOS
@@ -1252,18 +1404,16 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         )
         
         # ============================================================
-        # TARJETAS POR USUARIO (VERSIÓN CORREGIDA)
+        # TARJETAS POR USUARIO
         # ============================================================
         
         st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
         
-        # Mostrar tarjetas en un grid
         cols = st.columns(3)
         
         for idx, (_, row) in enumerate(df_resultados.iterrows()):
             col = cols[idx % 3]
             
-            # Determinar colores según estado
             if row['Incumplimiento']:
                 bg_color = '#fdedec'
                 border_color = '#e74c3c'
@@ -1280,7 +1430,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                 estado_emoji = '✅'
                 estado_text = 'Cumple'
             
-            # Tag de festivo
             festivo_tag = ''
             if row['Novedad_2'] == 'Sí':
                 festivo_tag = '<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">📋 Festivo</span>'
