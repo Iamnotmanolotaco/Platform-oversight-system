@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO COMPLETO
+# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO CORREGIDO
 
 import streamlit as st
 import pandas as pd
@@ -91,7 +91,6 @@ def limpiar_nombre(nombre):
         return nombre
     nombre = nombre.strip()
     
-    # Lista de prefijos a eliminar
     prefijos = [
         'Assistant', 'Manager', 'Coordinator', 'Specialist', 
         'Analyst', 'Director', 'Supervisor', 'Lead', 'Senior',
@@ -114,10 +113,7 @@ def limpiar_nombre(nombre):
             if len(nombre) > len(prefijo) and nombre[len(prefijo)] in [' ', '-', ':']:
                 nombre = nombre[len(prefijo) + 1:]
     
-    # Eliminar prefijos numéricos (ej: "7 Adriana Ortega" → "Adriana Ortega")
     nombre = re.sub(r'^\d+\s+', '', nombre)
-    
-    # Eliminar texto entre paréntesis y corchetes
     nombre = re.sub(r'\([^)]*\)', '', nombre).strip()
     nombre = re.sub(r'\[[^\]]*\]', '', nombre).strip()
     nombre = re.sub(r'\s+', ' ', nombre)
@@ -290,7 +286,6 @@ class ReporteTiemposSystem:
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
-        # Datos para diagnóstico
         self.diagnostico = {
             'usuarios_verificados': [],
             'plataformas': {}
@@ -377,15 +372,12 @@ class ReporteTiemposSystem:
         if not nombre_limpio:
             return nombre_limpio
         
-        # Buscar coincidencia exacta
         if nombre_limpio in self.mapa_nombres:
             return self.mapa_nombres[nombre_limpio]
         
-        # Buscar por nombre original
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
-        # Buscar coincidencia parcial
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
             if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
@@ -446,7 +438,6 @@ class ReporteTiemposSystem:
             
             nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
             
-            # Guardar compañía
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
                 if compania:
@@ -545,7 +536,6 @@ class ReporteTiemposSystem:
         novedades_list = []
         permisos_por_dia = []
         
-        # NOVEDADES MAX (hoja 1)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -560,7 +550,6 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX (rango - permisos): {len(df_max_validos)} registros")
         
-        # NOVEDADES MAX 2 (hoja 2 - festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -596,7 +585,6 @@ class ReporteTiemposSystem:
             else:
                 print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
-        # NOVEDADES CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -1153,7 +1141,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.stop()
         
         # ============================================================
-        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS
+        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS (CORREGIDO)
         # ============================================================
         
         with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
@@ -1169,9 +1157,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             ]
             
             st.write("### 🔍 Verificando usuarios específicos")
-            
-            # Crear un DataFrame para el resumen
-            resumen_usuarios = []
             
             for usuario in usuarios_a_verificar:
                 st.write(f"---")
@@ -1195,7 +1180,10 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                         usuario_camp = sistema.df_camp[sistema.df_camp[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
                         if len(usuario_camp) > 0:
                             horas_camp = usuario_camp['Hours Spent'].sum() if 'Hours Spent' in usuario_camp.columns else 0
-                            st.success(f"✅ Encontrado en Camp Legal: {len(usuario_camp)} registros, {horas_camp:.1f} horas")
+                            # Asegurar que horas_camp es float
+                            if isinstance(horas_camp, pd.Timedelta):
+                                horas_camp = horas_camp.total_seconds() / 3600
+                            st.success(f"✅ Encontrado en Camp Legal: {len(usuario_camp)} registros, {float(horas_camp):.1f} horas")
                             st.dataframe(usuario_camp[[col_nombre, 'Hours Spent', 'Time Entry Date']].head(5))
                         else:
                             st.warning(f"❌ No encontrado en Camp Legal")
@@ -1207,7 +1195,9 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                         usuario_sb = sistema.df_smokeball[sistema.df_smokeball[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
                         if len(usuario_sb) > 0:
                             horas_sb = usuario_sb['Hours'].sum() if 'Hours' in usuario_sb.columns else 0
-                            st.success(f"✅ Encontrado en Smokeball: {len(usuario_sb)} registros, {horas_sb:.1f} horas")
+                            if isinstance(horas_sb, pd.Timedelta):
+                                horas_sb = horas_sb.total_seconds() / 3600
+                            st.success(f"✅ Encontrado en Smokeball: {len(usuario_sb)} registros, {float(horas_sb):.1f} horas")
                             st.dataframe(usuario_sb[[col_nombre, 'Hours', 'Date']].head(5))
                         else:
                             st.warning(f"❌ No encontrado en Smokeball")
@@ -1219,7 +1209,9 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                         usuario_tg = sistema.df_toggl[sistema.df_toggl[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
                         if len(usuario_tg) > 0:
                             horas_tg = usuario_tg['Dur'].sum() if 'Dur' in usuario_tg.columns else 0
-                            st.success(f"✅ Encontrado en Toggl: {len(usuario_tg)} registros, {horas_tg:.1f} horas")
+                            if isinstance(horas_tg, pd.Timedelta):
+                                horas_tg = horas_tg.total_seconds() / 3600
+                            st.success(f"✅ Encontrado en Toggl: {len(usuario_tg)} registros, {float(horas_tg):.1f} horas")
                             st.dataframe(usuario_tg[[col_nombre, 'Dur', 'Date1']].head(5))
                         else:
                             st.warning(f"❌ No encontrado en Toggl")
