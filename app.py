@@ -1,3 +1,5 @@
+# app.py - VERSIÓN CORREGIDA (Novedades 2 SOLO para festivos)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -21,7 +23,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN (resumidas)
+# FUNCIONES DE CONVERSIÓN
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -131,6 +133,7 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
         return None
 
 def es_festivo(fecha):
+    """Determina si una fecha es festivo según la legislación colombiana"""
     festivos = [
         (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
     ]
@@ -234,7 +237,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PROCESADOR (con diagnóstico mejorado)
+# CLASE PRINCIPAL (CORREGIDA)
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -273,15 +276,16 @@ class ReporteTiemposSystem:
         self.mapa_nombres = {}
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
-        self.usuarios_novedades_2 = set()
+        self.usuarios_novedades_2 = set()  # Usuarios que DEBEN trabajar en festivos
         self.df_permisos_por_dia = None
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
-        # Para diagnóstico
-        self.diagnostico = {}
+        print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
+        print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
+        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
     
     def _calcular_dias_habiles(self):
         dias = 0
@@ -329,11 +333,6 @@ class ReporteTiemposSystem:
                 self.df_novedades_max = df
             elif key == 'novedades_max_2':
                 self.df_novedades_max_2 = df
-                # Guardar diagnóstico
-                self.diagnostico['novedades_2'] = {
-                    'registros': len(df),
-                    'columnas': list(df.columns)
-                }
             elif key == 'novedades_clg':
                 self.df_novedades_clg = df
             return True
@@ -486,68 +485,7 @@ class ReporteTiemposSystem:
         permisos_por_dia = []
         
         # ============================================================
-        # DIAGNÓSTICO DE NOVEDADES 2
-        # ============================================================
-        
-        if self.df_novedades_max_2 is not None:
-            df_max2 = self.df_novedades_max_2.copy()
-            self.diagnostico['novedades_2_original'] = {
-                'registros': len(df_max2),
-                'columnas': list(df_max2.columns)
-            }
-            
-            if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
-                # Mostrar muestra
-                print(f"   📊 Novedades 2 - Muestra:")
-                print(df_max2[['Persona', 'Fecha']].head(10))
-                
-                # Convertir fechas
-                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                
-                # Filtrar por rango
-                df_max2_filtrado = df_max2[
-                    (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
-                    (df_max2['Fecha_Conv'] <= self.fecha_fin)
-                ]
-                
-                self.diagnostico['novedades_2_filtrado'] = {
-                    'registros_en_rango': len(df_max2_filtrado),
-                    'fecha_inicio': self.fecha_inicio,
-                    'fecha_fin': self.fecha_fin
-                }
-                
-                print(f"   📊 Novedades 2 - Registros en rango: {len(df_max2_filtrado)}")
-                
-                if len(df_max2_filtrado) > 0:
-                    # Extraer usuarios
-                    for _, row in df_max2_filtrado.iterrows():
-                        nombre = row['Persona']
-                        nombre_normalizado = self.normalizar_nombre(nombre)
-                        fecha = row['Fecha_Conv']
-                        tipo = row['Tipo de Novedad'] if 'Tipo de Novedad' in row else 'Novedad 2'
-                        
-                        if nombre_normalizado and pd.notna(fecha):
-                            self.usuarios_novedades_2.add(nombre_normalizado)
-                            permisos_por_dia.append({
-                                'Usuario': nombre_normalizado,
-                                'Fecha': fecha,
-                                'Tipo': tipo,
-                                'Es_Novedad_2': True
-                            })
-                    
-                    print(f"   ✅ Usuarios en Novedades 2 (deben trabajar): {len(self.usuarios_novedades_2)}")
-                    print(f"   📋 Usuarios: {list(self.usuarios_novedades_2)}")
-                else:
-                    print(f"   ⚠️ No hay registros en Novedades 2 para el rango {self.fecha_inicio} - {self.fecha_fin}")
-            else:
-                print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
-                self.diagnostico['novedades_2_error'] = 'Columnas Persona/Fecha no encontradas'
-        else:
-            print(f"   ⚠️ Novedades 2 no está cargado")
-            self.diagnostico['novedades_2_error'] = 'Archivo no cargado'
-        
-        # ============================================================
-        # NOVEDADES MAX (hoja 1) - Rango de fechas
+        # NOVEDADES MAX (hoja 1) - Rango de fechas (permisos)
         # ============================================================
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
@@ -561,10 +499,51 @@ class ReporteTiemposSystem:
                 else:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ MAX (rango): {len(df_max_validos)} registros")
+                print(f"   ✅ MAX (rango - permisos): {len(df_max_validos)} registros")
         
         # ============================================================
-        # NOVEDADES CLG - Rango de fechas
+        # NOVEDADES MAX 2 (hoja 2) - SOLO PARA FESTIVOS (días específicos)
+        # ============================================================
+        if self.df_novedades_max_2 is not None:
+            df_max2 = self.df_novedades_max_2.copy()
+            if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
+                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                
+                # Filtrar por el rango de fechas del reporte
+                if len(df_max2) > 0:
+                    df_max2_filtrado = df_max2[
+                        (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
+                        (df_max2['Fecha_Conv'] <= self.fecha_fin)
+                    ]
+                else:
+                    df_max2_filtrado = df_max2
+                
+                # Guardar como permiso por día específico (festivos)
+                for _, row in df_max2_filtrado.iterrows():
+                    nombre = row['Persona']
+                    nombre_normalizado = self.normalizar_nombre(nombre)
+                    fecha = row['Fecha_Conv']
+                    tipo = row['Tipo de Novedad'] if 'Tipo de Novedad' in row else 'Trabajo en festivo'
+                    
+                    if nombre_normalizado and pd.notna(fecha):
+                        # Solo guardar si la fecha es festivo
+                        if es_festivo(fecha):
+                            self.usuarios_novedades_2.add(nombre_normalizado)
+                            permisos_por_dia.append({
+                                'Usuario': nombre_normalizado,
+                                'Fecha': fecha,
+                                'Tipo': tipo,
+                                'Es_Novedad_2': True
+                            })
+                            print(f"   📌 {nombre_normalizado} debe trabajar en festivo: {fecha}")
+                
+                print(f"   ✅ MAX 2 (festivos): {len(df_max2_filtrado)} registros en el rango")
+                print(f"   ✅ Usuarios que deben trabajar en festivos: {len(self.usuarios_novedades_2)}")
+            else:
+                print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
+        
+        # ============================================================
+        # NOVEDADES CLG - Rango de fechas (permisos)
         # ============================================================
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
@@ -578,25 +557,26 @@ class ReporteTiemposSystem:
                 else:
                     df_clg_validos['Tipo'] = 'Permiso CLG'
                 novedades_list.append(df_clg_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ CLG (rango): {len(df_clg_validos)} registros")
+                print(f"   ✅ CLG (rango - permisos): {len(df_clg_validos)} registros")
         
-        # Combinar novedades de rango
+        # Combinar novedades de rango (permisos)
         if novedades_list:
             self.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
-            print(f"   ✅ Total novedades combinadas (rango): {len(self.df_novedades_combinadas)}")
+            print(f"   ✅ Total novedades combinadas (rango - permisos): {len(self.df_novedades_combinadas)}")
         else:
             self.df_novedades_combinadas = None
         
-        # Guardar permisos por día específico
+        # Guardar permisos por día específico (festivos)
         if permisos_por_dia:
             self.df_permisos_por_dia = pd.DataFrame(permisos_por_dia)
-            print(f"   ✅ Permisos por día específico (Novedades 2): {len(self.df_permisos_por_dia)}")
+            print(f"   ✅ Permisos por día específico (festivos): {len(self.df_permisos_por_dia)}")
         else:
             self.df_permisos_por_dia = None
         
         return True
     
     def verificar_permiso(self, usuario, fecha):
+        """Verifica si un usuario tiene permiso en una fecha específica (rango)"""
         if self.df_novedades_combinadas is None:
             return None
         novedades_usuario = self.df_novedades_combinadas[
@@ -608,6 +588,7 @@ class ReporteTiemposSystem:
         return None
     
     def verificar_permiso_dia_especifico(self, usuario, fecha):
+        """Verifica si un usuario debe trabajar en un día específico (festivo)"""
         if self.df_permisos_por_dia is None:
             return None
         permisos = self.df_permisos_por_dia[
@@ -644,6 +625,7 @@ class ReporteTiemposSystem:
         except:
             df_proc['Date'] = self.fecha_inicio
         
+        # Filtrar por rango
         df_proc = df_proc[
             (df_proc['Date'] >= self.fecha_inicio) & 
             (df_proc['Date'] <= self.fecha_fin)
@@ -685,19 +667,18 @@ class ReporteTiemposSystem:
         print("="*70)
         print(f"📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
         print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
-        print(f"📋 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}")
         print("-"*70)
         
-        # Si no hay usuarios en Novedades 2, retornar DataFrame vacío PERO mostrar diagnóstico
-        if not self.usuarios_novedades_2:
-            print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
+        # ============================================================
+        # USUARIOS A PROCESAR: TODOS los que tienen plataforma (no solo Novedades 2)
+        # ============================================================
+        
+        if not self.usuarios_con_plataforma:
+            print("⚠️ No hay usuarios con plataforma. El reporte estará vacío.")
             self.df_analisis = pd.DataFrame()
-            
-            # Guardar diagnóstico para mostrar
-            self.diagnostico['sin_usuarios'] = True
-            self.diagnostico['razon'] = 'No hay usuarios en Novedades 2 para el rango seleccionado'
-            
             return True
+        
+        print(f"📋 Usuarios con plataforma: {len(self.usuarios_con_plataforma)}")
         
         df_camp = self.procesar_plataforma(self.df_camp, 'camp_legal')
         df_sb = self.procesar_plataforma(self.df_smokeball, 'smokeball')
@@ -708,7 +689,8 @@ class ReporteTiemposSystem:
         
         usuarios_dict = {}
         
-        for usuario in self.usuarios_novedades_2:
+        # Incluir TODOS los usuarios con plataforma
+        for usuario in self.usuarios_con_plataforma:
             compania = self.obtener_compania(usuario)
             usuarios_dict[usuario] = {
                 'Camp Legal': 0.0,
@@ -717,12 +699,17 @@ class ReporteTiemposSystem:
                 'Dias_Activos': 0,
                 'Actividades': [],
                 'Permiso': None,
-                'Permiso_Dia_Especifico': {},
-                'Novedad_2': 'Sí',
+                'Permiso_Dia_Especifico': {},  # Para festivos
+                'Novedad_2': 'No',  # Por defecto, no está en Novedades 2
                 'Compañia': compania,
                 'Detalle_Diario': {dia: 0.0 for dia in dias_columnas},
                 'Jornada_Diaria': {dia: jornada for dia, jornada in [(f'Dia_{fecha.strftime("%d/%m")}', jornada) for fecha, jornada in dias_con_jornada]}
             }
+        
+        # Marcar usuarios que están en Novedades 2 (festivos)
+        for usuario in self.usuarios_novedades_2:
+            if usuario in usuarios_dict:
+                usuarios_dict[usuario]['Novedad_2'] = 'Sí'
         
         def procesar_plataforma_detalle(df_plat, plataforma):
             if df_plat is None:
@@ -748,14 +735,17 @@ class ReporteTiemposSystem:
         for usuario in usuarios_dict:
             fecha_actual = self.fecha_inicio
             while fecha_actual <= self.fecha_fin:
+                # 1. Verificar permiso de rango (Novedades MAX y CLG)
                 permiso_rango = self.verificar_permiso(usuario, fecha_actual)
                 if permiso_rango:
                     usuarios_dict[usuario]['Permiso'] = permiso_rango
                 
-                permiso_dia = self.verificar_permiso_dia_especifico(usuario, fecha_actual)
-                if permiso_dia:
-                    dia_key = f'Dia_{fecha_actual.strftime("%d/%m")}'
-                    usuarios_dict[usuario]['Permiso_Dia_Especifico'][dia_key] = permiso_dia
+                # 2. Verificar si es festivo y debe trabajar (Novedades 2)
+                if es_festivo(fecha_actual):
+                    permiso_dia = self.verificar_permiso_dia_especifico(usuario, fecha_actual)
+                    if permiso_dia:
+                        dia_key = f'Dia_{fecha_actual.strftime("%d/%m")}'
+                        usuarios_dict[usuario]['Permiso_Dia_Especifico'][dia_key] = permiso_dia
                 
                 fecha_actual += timedelta(days=1)
         
@@ -769,10 +759,25 @@ class ReporteTiemposSystem:
             
             for dia, horas in data['Detalle_Diario'].items():
                 jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
-                tiene_permiso_dia = dia in data['Permiso_Dia_Especifico']
                 
-                if horas < jornada_esperada and not tiene_permiso_dia:
-                    fecha_str = dia.replace('Dia_', '')
+                # Verificar si tiene permiso de día específico para este día
+                tiene_permiso_dia = dia in data['Permiso_Dia_Especifico']
+                es_dia_festivo = False
+                
+                # Verificar si el día es festivo
+                fecha_str = dia.replace('Dia_', '')
+                try:
+                    dia_obj = datetime.strptime(fecha_str, '%d/%m').replace(year=self.fecha_inicio.year)
+                    es_dia_festivo = es_festivo(dia_obj)
+                except:
+                    pass
+                
+                # Si es festivo y tiene permiso de Novedades 2, no se considera incumplimiento
+                if es_dia_festivo and tiene_permiso_dia:
+                    # Tiene permiso para trabajar en festivo
+                    pass
+                elif horas < jornada_esperada:
+                    # Incumplimiento normal
                     try:
                         dia_obj = datetime.strptime(fecha_str, '%d/%m').replace(year=self.fecha_inicio.year)
                         es_sabado = dia_obj.weekday() == 5
@@ -785,12 +790,14 @@ class ReporteTiemposSystem:
                     except:
                         incumplimiento_diario.append(f"{dia}: {horas:.1f}h ❌")
                         dias_incumplidos.append(dia)
-                elif tiene_permiso_dia:
-                    permiso_tipo = data['Permiso_Dia_Especifico'][dia]
-                    incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (Permiso: {permiso_tipo}) 📋")
+                elif es_dia_festivo and horas == 0 and tiene_permiso_dia:
+                    # Si es festivo y debe trabajar pero no tiene horas
+                    incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (DEBE trabajar en festivo) 🚨")
+                    dias_incumplidos.append(dia)
             
             tiene_incumplimiento = len(dias_incumplidos) > 0
             
+            # Determinar estado final
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
@@ -804,7 +811,7 @@ class ReporteTiemposSystem:
                     
                     if tiene_permiso:
                         permiso_tipo = data['Permiso_Dia_Especifico'][dia]
-                        detalle_items.append(f"{dia}: {horas:.1f}h (Permiso: {permiso_tipo}) 📋")
+                        detalle_items.append(f"{dia}: {horas:.1f}h (Festivo: {permiso_tipo}) 📋")
                     elif horas < jornada_esperada:
                         detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h) ⚠️")
                     else:
@@ -821,7 +828,7 @@ class ReporteTiemposSystem:
                 'Dias_Activos': data['Dias_Activos'],
                 'Actividades': ' | '.join(data['Actividades']) if data['Actividades'] else 'Sin registro',
                 'Permiso': data['Permiso'] if data['Permiso'] else 'Sin permiso',
-                'Novedad_2': 'Sí',
+                'Novedad_2': data['Novedad_2'],
                 'Estado': estado,
                 'Porcentaje': round(porcentaje, 1),
                 'Detalle_Diario': detalle_str,
@@ -837,6 +844,12 @@ class ReporteTiemposSystem:
             self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
         
         print(f"\n✅ Usuarios en reporte: {len(self.df_analisis)}")
+        
+        incumplidores = self.df_analisis[self.df_analisis['Incumplimiento'] == True]
+        if len(incumplidores) > 0:
+            print(f"⚠️ Usuarios con incumplimiento: {len(incumplidores)}")
+            for _, row in incumplidores.iterrows():
+                print(f"   • {row['Usuario']} ({row['Compañia']}): {row['Incumplimiento_Detalle']}")
         
         return True
     
@@ -893,9 +906,6 @@ class ReporteTiemposSystem:
             'horas_tg': df['Toggl'].sum(),
             'incumplidores': len(df[df['Incumplimiento'] == True])
         }
-    
-    def get_diagnostico(self):
-        return self.diagnostico
 
 # ============================================================
 # INTERFAZ STREAMLIT
@@ -926,20 +936,13 @@ st.markdown("""
     .card-metric.danger .value { color: #e74c3c; }
     .card-metric.success { border-top-color: #27ae60; }
     .card-metric.success .value { color: #27ae60; }
-    .diagnostico-box {
-        background: #f0f4f8;
-        border: 1px solid #d5dbe0;
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin: 10px 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="main-header">
     <h1>📊 Reporte de Tiempos</h1>
-    <p>Análisis de tiempos por plataforma · Control de calidad · Novedades 2</p>
+    <p>Análisis de tiempos por plataforma · Control de calidad · Festivos</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -971,7 +974,7 @@ with st.sidebar:
         key="powerbi"
     )
     
-    st.caption("📌 Un solo archivo con dos hojas:\n- Novedades: Permisos (rango de fechas)\n- Novedades 2: Días específicos de trabajo")
+    st.caption("📌 Un solo archivo con dos hojas:\n- Novedades: Permisos (rango de fechas)\n- Novedades 2: Festivos (días específicos)")
     archivo_novedades_max = st.file_uploader(
         "📋 Template_Novedades_RRHH_MAX 1 1 2.xlsx",
         type=['xlsx'],
@@ -1072,80 +1075,23 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # ============================================================
-        # DIAGNÓSTICO DE NOVEDADES 2
-        # ============================================================
-        
-        with st.expander("🔍 Diagnóstico de Novedades 2", expanded=True):
-            if sistema.df_novedades_max_2 is not None:
-                st.write(f"✅ Novedades 2 cargado: {len(sistema.df_novedades_max_2)} registros")
-                st.write(f"📋 Columnas: {list(sistema.df_novedades_max_2.columns)}")
-                
-                if 'Persona' in sistema.df_novedades_max_2.columns and 'Fecha' in sistema.df_novedades_max_2.columns:
-                    st.write("📊 Muestra de datos:")
-                    st.dataframe(sistema.df_novedades_max_2[['Persona', 'Fecha']].head(10))
-                    
-                    # Mostrar fechas en el rango
-                    try:
-                        fechas = sistema.df_novedades_max_2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                        fechas_rango = fechas[
-                            (fechas >= fecha_inicio) & 
-                            (fechas <= fecha_fin)
-                        ]
-                        st.write(f"📊 Registros en el rango {fecha_inicio.strftime('%d/%m/%Y')} - {fecha_fin.strftime('%d/%m/%Y')}: {len(fechas_rango)}")
-                    except Exception as e:
-                        st.warning(f"⚠️ Error al procesar fechas: {e}")
-                else:
-                    st.warning("⚠️ Columnas 'Persona' o 'Fecha' no encontradas")
-            else:
-                st.warning("⚠️ Novedades 2 no está cargado")
-        
-        # ============================================================
-        # CONSTRUIR MAPA DE NOMBRES
-        # ============================================================
-        
+        # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
         st.success("✅ Mapa de nombres construido")
         
-        # ============================================================
-        # PROCESAR NOVEDADES
-        # ============================================================
-        
+        # Procesar novedades
         sistema.procesar_novedades()
+        st.success(f"✅ Novedades procesadas: {len(sistema.usuarios_novedades_2)} usuarios deben trabajar en festivos")
         
-        # Mostrar diagnóstico de usuarios en Novedades 2
-        st.write(f"📋 Usuarios en Novedades 2 en el rango: {len(sistema.usuarios_novedades_2)}")
-        
-        if sistema.usuarios_novedades_2:
-            st.write("📋 Usuarios:")
-            for usuario in sorted(sistema.usuarios_novedades_2):
-                st.write(f"   • {usuario}")
-        
-        # ============================================================
-        # VERIFICAR SI HAY USUARIOS
-        # ============================================================
-        
-        if not sistema.usuarios_novedades_2:
-            st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
-            st.info("💡 Esto significa que no hay personas programadas para trabajar en este período.")
-            st.info("💡 Verifica que el archivo Template_Novedades_RRHH_MAX tenga datos en la hoja 'Novedades 2' para las fechas seleccionadas.")
-            st.stop()
-        
-        # ============================================================
-        # CONSOLIDAR
-        # ============================================================
-        
+        # Consolidar (ahora incluye TODOS los usuarios, no solo Novedades 2)
         if not sistema.consolidar_todas_plataformas():
             st.error("❌ Error al consolidar datos")
             st.stop()
         st.success("✅ Datos consolidados")
         
-        # ============================================================
-        # RESULTADOS
-        # ============================================================
-        
+        # Resultados
         df_resultados = sistema.obtener_resultados()
         estadisticas = sistema.get_estadisticas()
         
@@ -1166,7 +1112,12 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         else:
             st.success("✅ Todos los usuarios cumplieron con la jornada mínima")
         
-        st.info(f"📋 Usuarios en Novedades 2: {len(sistema.usuarios_novedades_2)} personas deben marcar tiempo")
+        # Mostrar cuántos usuarios deben trabajar en festivos
+        usuarios_festivos = df_resultados[df_resultados['Novedad_2'] == 'Sí']
+        if len(usuarios_festivos) > 0:
+            st.info(f"📋 {len(usuarios_festivos)} usuarios deben trabajar en festivos (Novedades 2)")
+        
+        st.info(f"👥 Total de usuarios: {len(df_resultados)}")
         
         # KPIs
         col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -1229,14 +1180,15 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         df_mostrar = df_resultados[[
             'Usuario', 'Compañia', 'Camp Legal', 'Smokeball', 'Toggl', 
-            'Total_Horas', 'Dias_Activos', 'Permiso', 'Estado', 'Incumplimiento', 'Incumplimiento_Detalle'
+            'Total_Horas', 'Dias_Activos', 'Permiso', 'Novedad_2', 'Estado', 'Incumplimiento', 'Incumplimiento_Detalle'
         ]].copy()
         
         df_mostrar.columns = [
             'Usuario', 'Compañia', 'Camp Legal', 'Smokeball', 'Toggl',
-            'Total Horas', 'Días Activos', 'Permiso', 'Estado', '⚠️ Incumple', 'Detalle Incumplimiento'
+            'Total Horas', 'Días Activos', 'Permiso', '📋 Festivo', 'Estado', '⚠️ Incumple', 'Detalle Incumplimiento'
         ]
         
+        # Convertir columna de incumplimiento a texto
         df_mostrar['⚠️ Incumple'] = df_mostrar['⚠️ Incumple'].apply(lambda x: '🚨 SÍ' if x else '✅ NO')
         
         st.dataframe(
@@ -1319,6 +1271,9 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                 border_color = '#27ae60'
                 icono = '✅'
             
+            # Mostrar si está en Novedades 2
+            festivo_tag = '📋 Festivo' if row['Novedad_2'] == 'Sí' else ''
+            
             with col:
                 st.markdown(f"""
                 <div style="
@@ -1340,6 +1295,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                                 font-weight: 600;
                                 margin-left: 5px;
                             ">{row['Compañia']}</span>
+                            {f'<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">{festivo_tag}</span>' if festivo_tag else ''}
                         </div>
                         <span style="font-size: 18px; font-weight: 800; color: {border_color};">{row['Total_Horas']:.1f}h</span>
                     </div>
