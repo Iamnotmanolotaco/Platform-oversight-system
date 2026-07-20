@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON TARJETAS CORREGIDAS
+# app.py - REPORTE DE TIEMPOS CON TARJETAS CORREGIDAS (VERSIÓN FINAL)
 
 import streamlit as st
 import pandas as pd
@@ -1253,7 +1253,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         )
         
         # ============================================================
-        # TARJETAS POR USUARIO (CORREGIDAS)
+        # TARJETAS POR USUARIO (VERSIÓN CORREGIDA)
         # ============================================================
         
         st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
@@ -1264,32 +1264,24 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         for idx, (_, row) in enumerate(df_resultados.iterrows()):
             col = cols[idx % 3]
             
-            # Determinar color según estado
+            # Determinar colores según estado
             if row['Incumplimiento']:
                 bg_color = '#fdedec'
                 border_color = '#e74c3c'
-                icono = '🚨'
+                estado_emoji = '🚨'
+                estado_text = 'Incumple'
             elif row['Total_Horas'] == 0:
                 bg_color = '#f4f6f7'
                 border_color = '#95a5a6'
-                icono = '⛔'
+                estado_emoji = '⛔'
+                estado_text = 'Sin registro'
             else:
                 bg_color = '#eafaf1'
                 border_color = '#27ae60'
-                icono = '✅'
+                estado_emoji = '✅'
+                estado_text = 'Cumple'
             
-            # Determinar etiqueta de estado
-            estado_text = row['Estado']
-            if 'Completo' in estado_text:
-                estado_color = '#27ae60'
-            elif 'Parcial' in estado_text or 'Solo' in estado_text:
-                estado_color = '#f39c12'
-            elif 'Sin registro' in estado_text:
-                estado_color = '#95a5a6'
-            else:
-                estado_color = '#e74c3c'
-            
-            # Tag de festivo si aplica
+            # Tag de festivo
             festivo_tag = ''
             if row['Novedad_2'] == 'Sí':
                 festivo_tag = '<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">📋 Festivo</span>'
@@ -1297,36 +1289,31 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             with col:
                 st.markdown(f"""
                 <div style="
-                    background: {bg_color};
+                    background-color: {bg_color};
                     border: 2px solid {border_color};
-                    border-radius: 10px;
-                    padding: 12px 16px;
-                    margin-bottom: 10px;
+                    border-radius: 12px;
+                    padding: 14px 16px;
+                    margin-bottom: 12px;
                 ">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span style="font-size: 14px; font-weight: 700; color: #1a2332;">{icono} {row['Usuario']}</span>
-                            <span style="
-                                background: #e8e8e8;
-                                color: #333;
-                                padding: 1px 8px;
-                                border-radius: 10px;
-                                font-size: 10px;
-                                font-weight: 600;
-                                margin-left: 5px;
-                            ">{row['Compañia']}</span>
+                            <span style="font-size: 15px; font-weight: 700;">{estado_emoji} {row['Usuario']}</span>
+                            <br>
+                            <span style="font-size: 12px; color: #666;">🏢 {row['Compañia']}</span>
                             {festivo_tag}
                         </div>
-                        <span style="font-size: 18px; font-weight: 800; color: {border_color};">{row['Total_Horas']:.1f}h</span>
+                        <div style="font-size: 22px; font-weight: 800; color: {border_color};">
+                            {row['Total_Horas']:.1f}h
+                        </div>
                     </div>
-                    <div style="font-size: 12px; color: #555; margin-top: 4px;">
+                    <div style="font-size: 13px; color: #555; margin-top: 6px;">
                         CL: {row['Camp Legal']:.1f}h · SB: {row['Smokeball']:.1f}h · TG: {row['Toggl']:.1f}h
                     </div>
-                    <div style="font-size: 11px; color: #888; margin-top: 2px; display: flex; justify-content: space-between;">
+                    <div style="font-size: 12px; color: #888; margin-top: 4px; display: flex; justify-content: space-between;">
                         <span>📅 {row['Dias_Activos']} días activos</span>
-                        <span style="color: {estado_color}; font-weight: 600;">{row['Estado']}</span>
+                        <span style="font-weight: 600; color: {border_color};">{estado_text}</span>
                     </div>
-                    {f'<div style="font-size: 11px; color: #c0392b; margin-top: 4px; font-weight: 600; border-top: 1px solid #f5c6cb; padding-top: 4px;">⚠️ {row["Incumplimiento_Detalle"]}</div>' if row['Incumplimiento'] else ''}
+                    {f'<div style="font-size: 11px; color: #c0392b; margin-top: 6px; border-top: 1px solid #f5c6cb; padding-top: 6px;">⚠️ {row["Incumplimiento_Detalle"]}</div>' if row['Incumplimiento'] else ''}
                 </div>
                 """, unsafe_allow_html=True)
         
