@@ -1,3 +1,5 @@
+# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO COMPLETO
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -88,6 +90,8 @@ def limpiar_nombre(nombre):
     if not isinstance(nombre, str):
         return nombre
     nombre = nombre.strip()
+    
+    # Lista de prefijos a eliminar
     prefijos = [
         'Assistant', 'Manager', 'Coordinator', 'Specialist', 
         'Analyst', 'Director', 'Supervisor', 'Lead', 'Senior',
@@ -95,8 +99,10 @@ def limpiar_nombre(nombre):
         'Executive', 'Head', 'Chief', 'Principal', 'Partner',
         'CL Finance Assistant', 'Finance Assistant', 'Admin',
         'Operations', 'Support', 'Team Lead', 'Team Leader',
-        'Legal Agent Support', 'Customer Support Agent'
+        'Legal Agent Support', 'Customer Support Agent',
+        'Dpto Mail & Records', 'Leads Team'
     ]
+    
     for prefijo in prefijos:
         if nombre.startswith(prefijo + ' '):
             nombre = nombre[len(prefijo) + 1:]
@@ -107,9 +113,15 @@ def limpiar_nombre(nombre):
         elif nombre.startswith(prefijo):
             if len(nombre) > len(prefijo) and nombre[len(prefijo)] in [' ', '-', ':']:
                 nombre = nombre[len(prefijo) + 1:]
+    
+    # Eliminar prefijos numéricos (ej: "7 Adriana Ortega" → "Adriana Ortega")
+    nombre = re.sub(r'^\d+\s+', '', nombre)
+    
+    # Eliminar texto entre paréntesis y corchetes
     nombre = re.sub(r'\([^)]*\)', '', nombre).strip()
     nombre = re.sub(r'\[[^\]]*\]', '', nombre).strip()
     nombre = re.sub(r'\s+', ' ', nombre)
+    
     return nombre.strip()
 
 def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
@@ -131,16 +143,13 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
         return None
 
 def es_festivo(fecha):
-    """Determina si una fecha es festivo según la legislación colombiana"""
-    festivos = [
-        (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
-    ]
+    festivos = [(1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)]
     return (fecha.month, fecha.day) in festivos
 
 def get_jornada_esperada_por_dia(fecha):
-    if fecha.weekday() == 5:  # Sábado
+    if fecha.weekday() == 5:
         return 4.0
-    elif fecha.weekday() == 6:  # Domingo
+    elif fecha.weekday() == 6:
         return 0.0
     elif es_festivo(fecha):
         return 0.0
@@ -235,7 +244,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL CON MAPEO MEJORADO
+# CLASE PRINCIPAL CON DIAGNÓSTICO
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -281,6 +290,12 @@ class ReporteTiemposSystem:
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
+        # Datos para diagnóstico
+        self.diagnostico = {
+            'usuarios_verificados': [],
+            'plataformas': {}
+        }
+        
         print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
         print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
         print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
@@ -321,12 +336,28 @@ class ReporteTiemposSystem:
             
             if key == 'powerbi':
                 self.df_powerbi = df
+                self.diagnostico['plataformas']['powerbi'] = {
+                    'registros': len(df),
+                    'columnas': list(df.columns)
+                }
             elif key == 'camp_legal':
                 self.df_camp = df
+                self.diagnostico['plataformas']['camp_legal'] = {
+                    'registros': len(df),
+                    'columnas': list(df.columns)
+                }
             elif key == 'smokeball':
                 self.df_smokeball = df
+                self.diagnostico['plataformas']['smokeball'] = {
+                    'registros': len(df),
+                    'columnas': list(df.columns)
+                }
             elif key == 'toggl':
                 self.df_toggl = df
+                self.diagnostico['plataformas']['toggl'] = {
+                    'registros': len(df),
+                    'columnas': list(df.columns)
+                }
             elif key == 'novedades_max':
                 self.df_novedades_max = df
             elif key == 'novedades_max_2':
@@ -338,10 +369,6 @@ class ReporteTiemposSystem:
             st.error(f"Error cargando {key}: {e}")
             return False
     
-    # ============================================================
-    # NORMALIZACIÓN MEJORADA DE NOMBRES
-    # ============================================================
-    
     def normalizar_nombre(self, nombre):
         if not isinstance(nombre, str):
             return nombre
@@ -350,32 +377,26 @@ class ReporteTiemposSystem:
         if not nombre_limpio:
             return nombre_limpio
         
-        # 1. Buscar coincidencia exacta
+        # Buscar coincidencia exacta
         if nombre_limpio in self.mapa_nombres:
             return self.mapa_nombres[nombre_limpio]
         
-        # 2. Buscar por nombre original
+        # Buscar por nombre original
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
-        # 3. Buscar coincidencia parcial (más flexible)
+        # Buscar coincidencia parcial
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            # Si el nombre limpio está contenido en el nombre de la plataforma
             if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
-            # Si el nombre de la plataforma está contenido en el nombre limpio
             if nombre_plat.lower() in nombre_limpio.lower():
                 return nombre_canon
-            # Si comparten la primera palabra (nombre)
             if ' ' in nombre_limpio and ' ' in nombre_plat:
                 if nombre_limpio.split()[0].lower() == nombre_plat.split()[0].lower():
                     return nombre_canon
-            # Si comparten el apellido
-            if ' ' in nombre_limpio and ' ' in nombre_plat:
                 if nombre_limpio.split()[-1].lower() == nombre_plat.split()[-1].lower():
                     return nombre_canon
         
-        # 4. Si no se encuentra, devolver el nombre limpio
         return nombre_limpio
     
     def obtener_compania(self, nombre):
@@ -389,10 +410,6 @@ class ReporteTiemposSystem:
                 return compania
         
         return 'Sin compañía'
-    
-    # ============================================================
-    # CONSTRUIR MAPA DE NOMBRES MEJORADO
-    # ============================================================
     
     def construir_mapa_nombres(self):
         if self.df_powerbi is None:
@@ -429,20 +446,18 @@ class ReporteTiemposSystem:
             
             nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
             
-            # Guardar compañía con múltiples variantes
+            # Guardar compañía
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
                 if compania:
                     self.mapa_compania[nombre_canonico_limpio] = compania
                     self.mapa_compania[nombre_canonico] = compania
-                    # Versiones cortas del nombre
                     partes = nombre_canonico_limpio.split()
                     if len(partes) >= 2:
                         nombre_corto = f"{partes[0]} {partes[-1]}"
                         self.mapa_compania[nombre_corto] = compania
                     if len(partes) >= 1:
                         self.mapa_compania[partes[0]] = compania
-                    if len(partes) >= 1:
                         self.mapa_compania[partes[-1]] = compania
             
             # NAME CL
@@ -452,15 +467,17 @@ class ReporteTiemposSystem:
                     valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
-                    # Guardar variantes para coincidencia
+                    partes = valor_limpio.split()
+                    if len(partes) >= 2:
+                        nombre_corto = f"{partes[0]} {partes[-1]}"
+                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
+                    if len(partes) >= 1:
+                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
+                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
                             self.mapa_compania[valor_limpio] = compania
-                            partes = valor_limpio.split()
-                            if len(partes) >= 2:
-                                nombre_corto = f"{partes[0]} {partes[-1]}"
-                                self.mapa_compania[nombre_corto] = compania
             
             # NAME SB
             if col_sb in df_activos.columns and pd.notna(row[col_sb]):
@@ -469,14 +486,17 @@ class ReporteTiemposSystem:
                     valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
+                    partes = valor_limpio.split()
+                    if len(partes) >= 2:
+                        nombre_corto = f"{partes[0]} {partes[-1]}"
+                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
+                    if len(partes) >= 1:
+                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
+                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
                             self.mapa_compania[valor_limpio] = compania
-                            partes = valor_limpio.split()
-                            if len(partes) >= 2:
-                                nombre_corto = f"{partes[0]} {partes[-1]}"
-                                self.mapa_compania[nombre_corto] = compania
             
             # NAME TG
             if col_tg in df_activos.columns and pd.notna(row[col_tg]):
@@ -485,19 +505,21 @@ class ReporteTiemposSystem:
                     valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
+                    partes = valor_limpio.split()
+                    if len(partes) >= 2:
+                        nombre_corto = f"{partes[0]} {partes[-1]}"
+                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
+                    if len(partes) >= 1:
+                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
+                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
                             self.mapa_compania[valor_limpio] = compania
-                            partes = valor_limpio.split()
-                            if len(partes) >= 2:
-                                nombre_corto = f"{partes[0]} {partes[-1]}"
-                                self.mapa_compania[nombre_corto] = compania
             
             self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
             self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
             
-            # Guardar versiones cortas del nombre canónico para mejor coincidencia
             partes = nombre_canonico_limpio.split()
             if len(partes) >= 2:
                 nombre_corto = f"{partes[0]} {partes[-1]}"
@@ -523,7 +545,7 @@ class ReporteTiemposSystem:
         novedades_list = []
         permisos_por_dia = []
         
-        # NOVEDADES MAX (hoja 1) - Rango de fechas (permisos)
+        # NOVEDADES MAX (hoja 1)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -538,7 +560,7 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX (rango - permisos): {len(df_max_validos)} registros")
         
-        # NOVEDADES MAX 2 (hoja 2) - SOLO PARA FESTIVOS (días específicos)
+        # NOVEDADES MAX 2 (hoja 2 - festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -574,7 +596,7 @@ class ReporteTiemposSystem:
             else:
                 print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
-        # NOVEDADES CLG - Rango de fechas (permisos)
+        # NOVEDADES CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -916,6 +938,9 @@ class ReporteTiemposSystem:
             'incumplidores': len(df[df['Incumplimiento'] == True])
         }
 
+    def get_diagnostico(self):
+        return self.diagnostico
+
 # ============================================================
 # INTERFAZ STREAMLIT
 # ============================================================
@@ -945,6 +970,13 @@ st.markdown("""
     .card-metric.danger .value { color: #e74c3c; }
     .card-metric.success { border-top-color: #27ae60; }
     .card-metric.success .value { color: #27ae60; }
+    .diagnostico-box {
+        background: #f0f4f8;
+        border: 1px solid #d5dbe0;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1085,65 +1117,16 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
         # ============================================================
-        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS
+        # DIAGNÓSTICO DE ARCHIVOS CARGADOS
         # ============================================================
         
-        with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
-            st.write("### 🔍 Buscando a Cristhian Medina")
+        with st.expander("🔍 Diagnóstico de archivos cargados", expanded=True):
+            st.write("### 📊 Resumen de archivos cargados")
             
-            # 1. Buscar en Power BI
-            if sistema.df_powerbi is not None:
-                col_nombre = 'NAME CORRECT'
-                if col_nombre in sistema.df_powerbi.columns:
-                    cristhian_pb = sistema.df_powerbi[sistema.df_powerbi[col_nombre].str.contains('Cristhian|Medina', case=False, na=False)]
-                    if len(cristhian_pb) > 0:
-                        st.write("✅ Encontrado en Power BI:")
-                        st.dataframe(cristhian_pb[[col_nombre, 'NAME CL', 'NAME SB', 'NAME TG', 'COMPANY']])
-                    else:
-                        st.warning("❌ No encontrado en Power BI")
-            
-            # 2. Buscar en Camp Legal
-            if sistema.df_camp is not None:
-                col_nombre = 'Staff Name'
-                if col_nombre in sistema.df_camp.columns:
-                    cristhian_camp = sistema.df_camp[sistema.df_camp[col_nombre].str.contains('Cristhian|Medina', case=False, na=False)]
-                    if len(cristhian_camp) > 0:
-                        st.write("✅ Encontrado en Camp Legal:")
-                        st.dataframe(cristhian_camp[[col_nombre, 'Hours Spent', 'Time Entry Date']].head(10))
-                    else:
-                        st.warning("❌ No encontrado en Camp Legal")
-            
-            # 3. Buscar en Smokeball
-            if sistema.df_smokeball is not None:
-                col_nombre = 'Name'
-                if col_nombre in sistema.df_smokeball.columns:
-                    cristhian_sb = sistema.df_smokeball[sistema.df_smokeball[col_nombre].str.contains('Cristhian|Medina', case=False, na=False)]
-                    if len(cristhian_sb) > 0:
-                        st.write("✅ Encontrado en Smokeball:")
-                        st.dataframe(cristhian_sb[[col_nombre, 'Hours', 'Date']].head(10))
-                    else:
-                        st.warning("❌ No encontrado en Smokeball")
-            
-            # 4. Buscar en Toggl
-            if sistema.df_toggl is not None:
-                col_nombre = 'Member'
-                if col_nombre in sistema.df_toggl.columns:
-                    cristhian_tg = sistema.df_toggl[sistema.df_toggl[col_nombre].str.contains('Cristhian|Medina', case=False, na=False)]
-                    if len(cristhian_tg) > 0:
-                        st.write("✅ Encontrado en Toggl:")
-                        st.dataframe(cristhian_tg[[col_nombre, 'Dur', 'Date1']].head(10))
-                    else:
-                        st.warning("❌ No encontrado en Toggl")
-            
-            # 5. Verificar en el mapa de nombres
-            st.write("### 📋 Mapa de nombres")
-            if sistema.mapa_nombres:
-                nombres_similares = {k: v for k, v in sistema.mapa_nombres.items() if 'cristhian' in k.lower() or 'medina' in k.lower()}
-                if nombres_similares:
-                    st.write("Nombres similares encontrados en el mapa:")
-                    st.json(nombres_similares)
-                else:
-                    st.warning("No se encontraron nombres similares en el mapa")
+            for plataforma, info in sistema.diagnostico['plataformas'].items():
+                st.write(f"**{plataforma}:** {info['registros']} registros")
+                st.write(f"Columnas: {info['columnas']}")
+                st.write("---")
         
         # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
@@ -1168,6 +1151,97 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         if df_resultados is None or df_resultados.empty:
             st.warning("⚠️ No se encontraron resultados")
             st.stop()
+        
+        # ============================================================
+        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS
+        # ============================================================
+        
+        with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
+            
+            usuarios_a_verificar = [
+                'Gustavo Meneses', 'Amber Spelman', 'Angelly Castañeda', 
+                'Cristhian Medina', 'Daniela Squires', 'Delmin Salazar',
+                'Diana Carolina Moise', 'Diego Londoño', 'Gabriel Taborda',
+                'Joseph Hamilton', 'Juan David Quintero', 'Laura Valentina Bonilla',
+                'Luisa Segura', 'Maria Camila Acosta', 'Maria Lucia Mage',
+                'Marion Garcia', 'Marisol Tinajero', 'Monica Lopez Villamizar',
+                'Perlita Avila Casulla', 'Victor Zarate'
+            ]
+            
+            st.write("### 🔍 Verificando usuarios específicos")
+            
+            # Crear un DataFrame para el resumen
+            resumen_usuarios = []
+            
+            for usuario in usuarios_a_verificar:
+                st.write(f"---")
+                st.write(f"**👤 {usuario}**")
+                
+                # Buscar en Power BI
+                if sistema.df_powerbi is not None:
+                    col_nombre = 'NAME CORRECT'
+                    if col_nombre in sistema.df_powerbi.columns:
+                        usuario_pb = sistema.df_powerbi[sistema.df_powerbi[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
+                        if len(usuario_pb) > 0:
+                            st.success(f"✅ Encontrado en Power BI")
+                            st.dataframe(usuario_pb[[col_nombre, 'NAME CL', 'NAME SB', 'NAME TG', 'COMPANY']])
+                        else:
+                            st.warning(f"❌ No encontrado en Power BI")
+                
+                # Buscar en Camp Legal
+                if sistema.df_camp is not None:
+                    col_nombre = 'Staff Name'
+                    if col_nombre in sistema.df_camp.columns:
+                        usuario_camp = sistema.df_camp[sistema.df_camp[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
+                        if len(usuario_camp) > 0:
+                            horas_camp = usuario_camp['Hours Spent'].sum() if 'Hours Spent' in usuario_camp.columns else 0
+                            st.success(f"✅ Encontrado en Camp Legal: {len(usuario_camp)} registros, {horas_camp:.1f} horas")
+                            st.dataframe(usuario_camp[[col_nombre, 'Hours Spent', 'Time Entry Date']].head(5))
+                        else:
+                            st.warning(f"❌ No encontrado en Camp Legal")
+                
+                # Buscar en Smokeball
+                if sistema.df_smokeball is not None:
+                    col_nombre = 'Name'
+                    if col_nombre in sistema.df_smokeball.columns:
+                        usuario_sb = sistema.df_smokeball[sistema.df_smokeball[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
+                        if len(usuario_sb) > 0:
+                            horas_sb = usuario_sb['Hours'].sum() if 'Hours' in usuario_sb.columns else 0
+                            st.success(f"✅ Encontrado en Smokeball: {len(usuario_sb)} registros, {horas_sb:.1f} horas")
+                            st.dataframe(usuario_sb[[col_nombre, 'Hours', 'Date']].head(5))
+                        else:
+                            st.warning(f"❌ No encontrado en Smokeball")
+                
+                # Buscar en Toggl
+                if sistema.df_toggl is not None:
+                    col_nombre = 'Member'
+                    if col_nombre in sistema.df_toggl.columns:
+                        usuario_tg = sistema.df_toggl[sistema.df_toggl[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
+                        if len(usuario_tg) > 0:
+                            horas_tg = usuario_tg['Dur'].sum() if 'Dur' in usuario_tg.columns else 0
+                            st.success(f"✅ Encontrado en Toggl: {len(usuario_tg)} registros, {horas_tg:.1f} horas")
+                            st.dataframe(usuario_tg[[col_nombre, 'Dur', 'Date1']].head(5))
+                        else:
+                            st.warning(f"❌ No encontrado en Toggl")
+                
+                # Normalizar nombre
+                nombre_normalizado = sistema.normalizar_nombre(usuario)
+                st.write(f"📋 Nombre normalizado: **{nombre_normalizado}**")
+                
+                # Verificar en el mapa
+                if nombre_normalizado in sistema.mapa_nombres:
+                    st.success(f"✅ Encontrado en el mapa de nombres")
+                else:
+                    st.warning(f"❌ No encontrado en el mapa de nombres")
+                
+                # Verificar en el DataFrame de resultados
+                if df_resultados is not None and len(df_resultados) > 0:
+                    usuario_resultado = df_resultados[df_resultados['Usuario'].str.contains(usuario.split()[0], case=False, na=False)]
+                    if len(usuario_resultado) > 0:
+                        st.success(f"✅ Encontrado en el reporte final")
+                        st.dataframe(usuario_resultado[['Usuario', 'Total_Horas', 'Camp Legal', 'Smokeball', 'Toggl', 'Estado']])
+                    else:
+                        st.warning(f"❌ No encontrado en el reporte final")
         
         # ============================================================
         # MOSTRAR RESULTADOS
