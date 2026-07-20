@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CORREGIDA CON COMPANY
+# app.py - VERSIÓN CORREGIDA (Deicy y Rangos de fechas)
 
 import streamlit as st
 import pandas as pd
@@ -198,7 +198,7 @@ COLUMNAS_MAPEO = {
             'nombre_sb': 'NAME SB',
             'nombre_tg': 'NAME TG',
             'status': 'USER STATUS',
-            'company': 'COMPANY'  # ← Esta es la columna que estamos buscando
+            'company': 'COMPANY'
         }
     },
     'novedades_max': {
@@ -321,14 +321,8 @@ class ReporteTiemposSystem:
             
             if key == 'powerbi':
                 self.df_powerbi = df
-                # ✅ Diagnóstico: Verificar que COMPANY existe
                 if 'COMPANY' in df.columns:
-                    print(f"✅ Columna COMPANY encontrada en Power BI")
-                    print(f"   Valores únicos: {df['COMPANY'].unique()}")
-                else:
-                    print(f"⚠️ Columna COMPANY NO encontrada en Power BI")
-                    print(f"   Columnas disponibles: {list(df.columns)}")
-            
+                    print(f"✅ Columna COMPANY encontrada: {df['COMPANY'].unique()}")
             elif key == 'camp_legal':
                 self.df_camp = df
             elif key == 'smokeball':
@@ -352,19 +346,39 @@ class ReporteTiemposSystem:
         nombre_limpio = limpiar_nombre(nombre.strip())
         if not nombre_limpio:
             return nombre_limpio
+        
+        # Buscar coincidencia exacta
         if nombre_limpio in self.mapa_nombres:
             return self.mapa_nombres[nombre_limpio]
+        
+        # Buscar por nombre original
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
+        
+        # Buscar coincidencia parcial (para casos como "Deicy Nino" vs "Deicy Aurora Niño")
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            if (nombre_limpio.lower() in nombre_plat.lower() or 
-                nombre_plat.lower() in nombre_limpio.lower()):
+            # Si el nombre limpio está contenido en el nombre de la plataforma
+            if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
+            # Si el nombre de la plataforma está contenido en el nombre limpio
+            if nombre_plat.lower() in nombre_limpio.lower():
+                return nombre_canon
+        
         return nombre_limpio
     
     def obtener_compania(self, nombre):
         nombre_limpio = limpiar_nombre(nombre)
-        return self.mapa_compania.get(nombre_limpio, 'Sin compañía')
+        
+        # Buscar por coincidencia exacta
+        if nombre_limpio in self.mapa_compania:
+            return self.mapa_compania[nombre_limpio]
+        
+        # Buscar por coincidencia parcial (para Deicy)
+        for nombre_map, compania in self.mapa_compania.items():
+            if nombre_limpio.lower() in nombre_map.lower() or nombre_map.lower() in nombre_limpio.lower():
+                return compania
+        
+        return 'Sin compañía'
     
     def construir_mapa_nombres(self):
         if self.df_powerbi is None:
@@ -379,11 +393,9 @@ class ReporteTiemposSystem:
         col_status = cols.get('status', 'USER STATUS')
         col_company = cols.get('company', 'COMPANY')
         
-        # ✅ Verificar que la columna COMPANY existe
+        # Verificar que COMPANY existe
         if col_company not in self.df_powerbi.columns:
-            st.warning(f"⚠️ Columna '{col_company}' no encontrada en Power BI")
-            st.write(f"📋 Columnas disponibles: {list(self.df_powerbi.columns)}")
-            # Buscar alternativas
+            st.warning(f"⚠️ Columna '{col_company}' no encontrada")
             for col in self.df_powerbi.columns:
                 if 'COMPANY' in col.upper() or 'EMPRESA' in col.upper():
                     col_company = col
@@ -394,15 +406,12 @@ class ReporteTiemposSystem:
             df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
         else:
             df_activos = self.df_powerbi.copy()
-            st.warning(f"⚠️ Columna '{col_status}' no encontrada, usando todos los usuarios")
         
         self.mapa_nombres = {}
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
         
-        # ✅ Contador de compañías para diagnóstico
-        companias_encontradas = {}
-        
+        # Primero, construir el mapa de nombres y compañías
         for idx, row in df_activos.iterrows():
             nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
             if not nombre_canonico:
@@ -410,70 +419,86 @@ class ReporteTiemposSystem:
             
             nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
             
-            # ✅ Guardar compañía
+            # Guardar compañía para el nombre canónico
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
                 if compania:
                     self.mapa_compania[nombre_canonico_limpio] = compania
                     self.mapa_compania[nombre_canonico] = compania
-                    companias_encontradas[compania] = companias_encontradas.get(compania, 0) + 1
-            
-            tiene_cl = False
-            tiene_sb = False
-            tiene_tg = False
+                    # Guardar también versiones cortas del nombre (para Deicy)
+                    partes = nombre_canonico_limpio.split()
+                    if len(partes) >= 2:
+                        nombre_corto = f"{partes[0]} {partes[-1]}"
+                        self.mapa_compania[nombre_corto] = compania
             
             # NAME CL
             if col_cl in df_activos.columns and pd.notna(row[col_cl]):
                 valor = str(row[col_cl]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    tiene_cl = True
+                    valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
-                            self.mapa_compania[limpiar_nombre(valor)] = compania
+                            self.mapa_compania[valor_limpio] = compania
+                            # Guardar versiones cortas
+                            partes = valor_limpio.split()
+                            if len(partes) >= 2:
+                                nombre_corto = f"{partes[0]} {partes[-1]}"
+                                self.mapa_compania[nombre_corto] = compania
             
             # NAME SB
             if col_sb in df_activos.columns and pd.notna(row[col_sb]):
                 valor = str(row[col_sb]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    tiene_sb = True
+                    valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
-                            self.mapa_compania[limpiar_nombre(valor)] = compania
+                            self.mapa_compania[valor_limpio] = compania
+                            partes = valor_limpio.split()
+                            if len(partes) >= 2:
+                                nombre_corto = f"{partes[0]} {partes[-1]}"
+                                self.mapa_compania[nombre_corto] = compania
             
             # NAME TG
             if col_tg in df_activos.columns and pd.notna(row[col_tg]):
                 valor = str(row[col_tg]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    tiene_tg = True
+                    valor_limpio = limpiar_nombre(valor)
                     self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
+                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         compania = str(row[col_company]).strip()
                         if compania:
-                            self.mapa_compania[limpiar_nombre(valor)] = compania
+                            self.mapa_compania[valor_limpio] = compania
+                            partes = valor_limpio.split()
+                            if len(partes) >= 2:
+                                nombre_corto = f"{partes[0]} {partes[-1]}"
+                                self.mapa_compania[nombre_corto] = compania
             
             self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
             self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
             
+            # Verificar si tiene plataforma
+            tiene_cl = col_cl in df_activos.columns and pd.notna(row[col_cl]) and str(row[col_cl]).strip() not in ['', 'true', 'false', 'nan', 'none']
+            tiene_sb = col_sb in df_activos.columns and pd.notna(row[col_sb]) and str(row[col_sb]).strip() not in ['', 'true', 'false', 'nan', 'none']
+            tiene_tg = col_tg in df_activos.columns and pd.notna(row[col_tg]) and str(row[col_tg]).strip() not in ['', 'true', 'false', 'nan', 'none']
+            
             if tiene_cl or tiene_sb or tiene_tg:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
         
-        # ✅ Mostrar diagnóstico de compañías
-        st.write(f"📊 Compañías encontradas: {companias_encontradas}")
-        st.write(f"✅ Usuarios a incluir: {len(self.usuarios_con_plataforma)}")
-        st.write(f"✅ Compañías mapeadas: {len(self.mapa_compania)}")
+        # Diagnóstico
+        st.write(f"📊 Compañías mapeadas: {len(self.mapa_compania)}")
+        st.write(f"📋 Compañías encontradas: {set(self.mapa_compania.values())}")
         
-        # ✅ Mostrar algunos ejemplos de mapeo de compañías
-        if self.mapa_compania:
-            st.write("📋 Ejemplos de mapeo de compañías:")
-            for i, (nombre, compania) in enumerate(list(self.mapa_compania.items())[:5]):
-                st.write(f"   • {nombre} → {compania}")
+        # Buscar específicamente a Deicy
+        for nombre in self.mapa_compania.keys():
+            if 'deicy' in nombre.lower() or 'nino' in nombre.lower():
+                st.write(f"🔍 Encontrado: {nombre} → {self.mapa_compania[nombre]}")
         
         return True
     
@@ -502,10 +527,15 @@ class ReporteTiemposSystem:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
                 df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                df_max2_filtrado = df_max2[
-                    (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
-                    (df_max2['Fecha_Conv'] <= self.fecha_fin)
-                ]
+                
+                # Filtrar por rango de fechas
+                if len(df_max2) > 0:
+                    df_max2_filtrado = df_max2[
+                        (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
+                        (df_max2['Fecha_Conv'] <= self.fecha_fin)
+                    ]
+                else:
+                    df_max2_filtrado = df_max2
                 
                 for _, row in df_max2_filtrado.iterrows():
                     nombre = row['Persona']
@@ -593,6 +623,7 @@ class ReporteTiemposSystem:
         except:
             df_proc['Date'] = self.fecha_inicio
         
+        # Filtrar por rango
         df_proc = df_proc[
             (df_proc['Date'] >= self.fecha_inicio) & 
             (df_proc['Date'] <= self.fecha_fin)
@@ -637,6 +668,12 @@ class ReporteTiemposSystem:
         print(f"📋 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}")
         print("-"*70)
         
+        # Si no hay usuarios en Novedades 2, retornar DataFrame vacío
+        if not self.usuarios_novedades_2:
+            print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
+            self.df_analisis = pd.DataFrame()
+            return True
+        
         df_camp = self.procesar_plataforma(self.df_camp, 'camp_legal')
         df_sb = self.procesar_plataforma(self.df_smokeball, 'smokeball')
         df_tg = self.procesar_plataforma(self.df_toggl, 'toggl')
@@ -645,11 +682,6 @@ class ReporteTiemposSystem:
         dias_columnas = [f'Dia_{fecha.strftime("%d/%m")}' for fecha, _ in dias_con_jornada]
         
         usuarios_dict = {}
-        
-        if not self.usuarios_novedades_2:
-            print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
-            self.df_analisis = pd.DataFrame()
-            return True
         
         for usuario in self.usuarios_novedades_2:
             compania = self.obtener_compania(usuario)
@@ -996,17 +1028,17 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
         # ============================================================
-        # DIAGNÓSTICO DE POWER BI
+        # DIAGNÓSTICO
         # ============================================================
         
-        with st.expander("🔍 Diagnóstico de Power BI", expanded=True):
+        with st.expander("🔍 Diagnóstico de archivos", expanded=True):
             if sistema.df_powerbi is not None:
                 st.write(f"✅ Power BI: {len(sistema.df_powerbi)} registros")
                 st.write(f"📋 Columnas: {list(sistema.df_powerbi.columns)}")
                 
                 # Buscar COMPANY
                 col_company = None
-                for col in ['COMPANY', 'COMPAÑIA', 'EMPRESA', 'Company', 'Compañía', 'Empresa']:
+                for col in ['COMPANY', 'COMPAÑIA', 'EMPRESA']:
                     if col in sistema.df_powerbi.columns:
                         col_company = col
                         break
@@ -1016,7 +1048,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                     valores = sistema.df_powerbi[col_company].unique()
                     st.write(f"📊 Valores únicos: {list(valores)}")
                     
-                    # Conteo
                     conteo = sistema.df_powerbi[col_company].value_counts()
                     st.write("📊 Conteo por compañía:")
                     st.dataframe(conteo.reset_index().rename(columns={'index': 'Compañía', col_company: 'Cantidad'}))
@@ -1027,9 +1058,14 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                         if len(deicy) > 0:
                             st.write("🔍 Deicy Aurora Niño encontrada:")
                             st.dataframe(deicy[['NAME CORRECT', col_company]])
+                        else:
+                            # Buscar por "Nino"
+                            nino = sistema.df_powerbi[sistema.df_powerbi['NAME CORRECT'].str.contains('Nino', case=False, na=False)]
+                            if len(nino) > 0:
+                                st.write("🔍 Posible Deicy (contiene 'Nino'):")
+                                st.dataframe(nino[['NAME CORRECT', col_company]])
                 else:
                     st.warning("⚠️ No se encontró columna de COMPANY")
-                    st.write(f"📋 Columnas disponibles: {list(sistema.df_powerbi.columns)}")
         
         # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
@@ -1043,6 +1079,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         if not sistema.usuarios_novedades_2:
             st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
+            st.info("💡 Esto puede deberse a que no hay datos en el rango de fechas seleccionado.")
             st.stop()
         
         # Consolidar
