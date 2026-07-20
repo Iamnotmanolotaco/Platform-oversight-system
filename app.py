@@ -1,5 +1,3 @@
-# app.py - VERSIÓN CORREGIDA (NOVEDADES POR FECHA ESPECÍFICA)
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,7 +21,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN
+# FUNCIONES DE CONVERSIÓN (resumidas)
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -236,7 +234,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL
+# CLASE PROCESADOR (con diagnóstico mejorado)
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -276,15 +274,14 @@ class ReporteTiemposSystem:
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
-        self.df_permisos_por_dia = None  # DataFrame con permisos por día específico
+        self.df_permisos_por_dia = None
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
-        print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
-        print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
-        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
+        # Para diagnóstico
+        self.diagnostico = {}
     
     def _calcular_dias_habiles(self):
         dias = 0
@@ -332,6 +329,11 @@ class ReporteTiemposSystem:
                 self.df_novedades_max = df
             elif key == 'novedades_max_2':
                 self.df_novedades_max_2 = df
+                # Guardar diagnóstico
+                self.diagnostico['novedades_2'] = {
+                    'registros': len(df),
+                    'columnas': list(df.columns)
+                }
             elif key == 'novedades_clg':
                 self.df_novedades_clg = df
             return True
@@ -484,6 +486,67 @@ class ReporteTiemposSystem:
         permisos_por_dia = []
         
         # ============================================================
+        # DIAGNÓSTICO DE NOVEDADES 2
+        # ============================================================
+        
+        if self.df_novedades_max_2 is not None:
+            df_max2 = self.df_novedades_max_2.copy()
+            self.diagnostico['novedades_2_original'] = {
+                'registros': len(df_max2),
+                'columnas': list(df_max2.columns)
+            }
+            
+            if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
+                # Mostrar muestra
+                print(f"   📊 Novedades 2 - Muestra:")
+                print(df_max2[['Persona', 'Fecha']].head(10))
+                
+                # Convertir fechas
+                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                
+                # Filtrar por rango
+                df_max2_filtrado = df_max2[
+                    (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
+                    (df_max2['Fecha_Conv'] <= self.fecha_fin)
+                ]
+                
+                self.diagnostico['novedades_2_filtrado'] = {
+                    'registros_en_rango': len(df_max2_filtrado),
+                    'fecha_inicio': self.fecha_inicio,
+                    'fecha_fin': self.fecha_fin
+                }
+                
+                print(f"   📊 Novedades 2 - Registros en rango: {len(df_max2_filtrado)}")
+                
+                if len(df_max2_filtrado) > 0:
+                    # Extraer usuarios
+                    for _, row in df_max2_filtrado.iterrows():
+                        nombre = row['Persona']
+                        nombre_normalizado = self.normalizar_nombre(nombre)
+                        fecha = row['Fecha_Conv']
+                        tipo = row['Tipo de Novedad'] if 'Tipo de Novedad' in row else 'Novedad 2'
+                        
+                        if nombre_normalizado and pd.notna(fecha):
+                            self.usuarios_novedades_2.add(nombre_normalizado)
+                            permisos_por_dia.append({
+                                'Usuario': nombre_normalizado,
+                                'Fecha': fecha,
+                                'Tipo': tipo,
+                                'Es_Novedad_2': True
+                            })
+                    
+                    print(f"   ✅ Usuarios en Novedades 2 (deben trabajar): {len(self.usuarios_novedades_2)}")
+                    print(f"   📋 Usuarios: {list(self.usuarios_novedades_2)}")
+                else:
+                    print(f"   ⚠️ No hay registros en Novedades 2 para el rango {self.fecha_inicio} - {self.fecha_fin}")
+            else:
+                print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
+                self.diagnostico['novedades_2_error'] = 'Columnas Persona/Fecha no encontradas'
+        else:
+            print(f"   ⚠️ Novedades 2 no está cargado")
+            self.diagnostico['novedades_2_error'] = 'Archivo no cargado'
+        
+        # ============================================================
         # NOVEDADES MAX (hoja 1) - Rango de fechas
         # ============================================================
         if self.df_novedades_max is not None:
@@ -499,45 +562,6 @@ class ReporteTiemposSystem:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX (rango): {len(df_max_validos)} registros")
-        
-        # ============================================================
-        # NOVEDADES MAX 2 (hoja 2) - Fecha específica (SOLO EL DÍA EXACTO)
-        # ============================================================
-        if self.df_novedades_max_2 is not None:
-            df_max2 = self.df_novedades_max_2.copy()
-            if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
-                df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                
-                # Filtrar por el rango de fechas del reporte
-                if len(df_max2) > 0:
-                    df_max2_filtrado = df_max2[
-                        (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
-                        (df_max2['Fecha_Conv'] <= self.fecha_fin)
-                    ]
-                else:
-                    df_max2_filtrado = df_max2
-                
-                # Para Novedades 2, la fecha es específica (solo ese día)
-                # Guardamos como permiso por día específico
-                for _, row in df_max2_filtrado.iterrows():
-                    nombre = row['Persona']
-                    nombre_normalizado = self.normalizar_nombre(nombre)
-                    fecha = row['Fecha_Conv']
-                    tipo = row['Tipo de Novedad'] if 'Tipo de Novedad' in row else 'Novedad 2'
-                    
-                    if nombre_normalizado and pd.notna(fecha):
-                        # Agregar a la lista de usuarios que trabajan (Novedades 2)
-                        self.usuarios_novedades_2.add(nombre_normalizado)
-                        # Guardar permiso para ese día específico
-                        permisos_por_dia.append({
-                            'Usuario': nombre_normalizado,
-                            'Fecha': fecha,
-                            'Tipo': tipo,
-                            'Es_Novedad_2': True
-                        })
-                
-                print(f"   ✅ MAX 2 (fecha específica): {len(df_max2_filtrado)} registros en el rango")
-                print(f"   ✅ Usuarios en Novedades 2 (deben trabajar): {len(self.usuarios_novedades_2)}")
         
         # ============================================================
         # NOVEDADES CLG - Rango de fechas
@@ -556,31 +580,23 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_clg_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ CLG (rango): {len(df_clg_validos)} registros")
         
-        # Combinar todas las novedades de rango
+        # Combinar novedades de rango
         if novedades_list:
             self.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
             print(f"   ✅ Total novedades combinadas (rango): {len(self.df_novedades_combinadas)}")
         else:
             self.df_novedades_combinadas = None
         
-        # Guardar permisos por día específico (Novedades 2)
+        # Guardar permisos por día específico
         if permisos_por_dia:
             self.df_permisos_por_dia = pd.DataFrame(permisos_por_dia)
             print(f"   ✅ Permisos por día específico (Novedades 2): {len(self.df_permisos_por_dia)}")
         else:
             self.df_permisos_por_dia = None
         
-        # Mostrar usuarios en Novedades 2
-        if self.usuarios_novedades_2:
-            print(f"\n   📋 Usuarios en Novedades 2 (deben trabajar en el rango):")
-            for usuario in sorted(self.usuarios_novedades_2):
-                compania = self.obtener_compania(usuario)
-                print(f"      • {usuario} ({compania})")
-        
         return True
     
     def verificar_permiso(self, usuario, fecha):
-        """Verifica si un usuario tiene permiso en una fecha específica (rango)"""
         if self.df_novedades_combinadas is None:
             return None
         novedades_usuario = self.df_novedades_combinadas[
@@ -592,7 +608,6 @@ class ReporteTiemposSystem:
         return None
     
     def verificar_permiso_dia_especifico(self, usuario, fecha):
-        """Verifica si un usuario tiene permiso en un día específico (Novedades 2)"""
         if self.df_permisos_por_dia is None:
             return None
         permisos = self.df_permisos_por_dia[
@@ -602,9 +617,6 @@ class ReporteTiemposSystem:
         if len(permisos) > 0:
             return permisos.iloc[0]['Tipo']
         return None
-    
-    def verificar_novedad_2(self, usuario):
-        return usuario in self.usuarios_novedades_2
     
     def procesar_plataforma(self, df, config_key):
         if df is None:
@@ -676,9 +688,15 @@ class ReporteTiemposSystem:
         print(f"📋 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}")
         print("-"*70)
         
+        # Si no hay usuarios en Novedades 2, retornar DataFrame vacío PERO mostrar diagnóstico
         if not self.usuarios_novedades_2:
             print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
             self.df_analisis = pd.DataFrame()
+            
+            # Guardar diagnóstico para mostrar
+            self.diagnostico['sin_usuarios'] = True
+            self.diagnostico['razon'] = 'No hay usuarios en Novedades 2 para el rango seleccionado'
+            
             return True
         
         df_camp = self.procesar_plataforma(self.df_camp, 'camp_legal')
@@ -699,7 +717,7 @@ class ReporteTiemposSystem:
                 'Dias_Activos': 0,
                 'Actividades': [],
                 'Permiso': None,
-                'Permiso_Dia_Especifico': {},  # Permisos por día específico (Novedades 2)
+                'Permiso_Dia_Especifico': {},
                 'Novedad_2': 'Sí',
                 'Compañia': compania,
                 'Detalle_Diario': {dia: 0.0 for dia in dias_columnas},
@@ -730,12 +748,10 @@ class ReporteTiemposSystem:
         for usuario in usuarios_dict:
             fecha_actual = self.fecha_inicio
             while fecha_actual <= self.fecha_fin:
-                # 1. Verificar permiso de rango (Novedades MAX y CLG)
                 permiso_rango = self.verificar_permiso(usuario, fecha_actual)
                 if permiso_rango:
                     usuarios_dict[usuario]['Permiso'] = permiso_rango
                 
-                # 2. Verificar permiso de día específico (Novedades 2)
                 permiso_dia = self.verificar_permiso_dia_especifico(usuario, fecha_actual)
                 if permiso_dia:
                     dia_key = f'Dia_{fecha_actual.strftime("%d/%m")}'
@@ -753,8 +769,6 @@ class ReporteTiemposSystem:
             
             for dia, horas in data['Detalle_Diario'].items():
                 jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
-                
-                # Verificar si tiene permiso de día específico para este día
                 tiene_permiso_dia = dia in data['Permiso_Dia_Especifico']
                 
                 if horas < jornada_esperada and not tiene_permiso_dia:
@@ -772,13 +786,11 @@ class ReporteTiemposSystem:
                         incumplimiento_diario.append(f"{dia}: {horas:.1f}h ❌")
                         dias_incumplidos.append(dia)
                 elif tiene_permiso_dia:
-                    # Si tiene permiso de día específico, no se considera incumplimiento
                     permiso_tipo = data['Permiso_Dia_Especifico'][dia]
                     incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (Permiso: {permiso_tipo}) 📋")
             
             tiene_incumplimiento = len(dias_incumplidos) > 0
             
-            # Determinar estado final
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
@@ -825,12 +837,6 @@ class ReporteTiemposSystem:
             self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
         
         print(f"\n✅ Usuarios en reporte: {len(self.df_analisis)}")
-        
-        incumplidores = self.df_analisis[self.df_analisis['Incumplimiento'] == True]
-        if len(incumplidores) > 0:
-            print(f"⚠️ Usuarios con incumplimiento: {len(incumplidores)}")
-            for _, row in incumplidores.iterrows():
-                print(f"   • {row['Usuario']} ({row['Compañia']}): {row['Incumplimiento_Detalle']}")
         
         return True
     
@@ -887,6 +893,9 @@ class ReporteTiemposSystem:
             'horas_tg': df['Toggl'].sum(),
             'incumplidores': len(df[df['Incumplimiento'] == True])
         }
+    
+    def get_diagnostico(self):
+        return self.diagnostico
 
 # ============================================================
 # INTERFAZ STREAMLIT
@@ -917,6 +926,13 @@ st.markdown("""
     .card-metric.danger .value { color: #e74c3c; }
     .card-metric.success { border-top-color: #27ae60; }
     .card-metric.success .value { color: #27ae60; }
+    .diagnostico-box {
+        background: #f0f4f8;
+        border: 1px solid #d5dbe0;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1030,6 +1046,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
     try:
         sistema = ReporteTiemposSystem(fecha_inicio, fecha_fin)
         
+        # Cargar archivos
         if archivo_powerbi is not None:
             sistema.cargar_archivo(archivo_powerbi, 'powerbi')
             st.success("✅ Power BI cargado")
@@ -1055,44 +1072,80 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Diagnóstico
-        with st.expander("🔍 Diagnóstico de archivos", expanded=True):
-            if sistema.df_powerbi is not None:
-                st.write(f"✅ Power BI: {len(sistema.df_powerbi)} registros")
-                
-                # Buscar COMPANY
-                col_company = None
-                for col in ['COMPANY', 'COMPAÑIA', 'EMPRESA']:
-                    if col in sistema.df_powerbi.columns:
-                        col_company = col
-                        break
-                
-                if col_company:
-                    st.success(f"✅ Columna COMPANY encontrada: '{col_company}'")
-                    valores = sistema.df_powerbi[col_company].unique()
-                    st.write(f"📊 Valores únicos: {list(valores)}")
+        # ============================================================
+        # DIAGNÓSTICO DE NOVEDADES 2
+        # ============================================================
         
-        # Construir mapa de nombres
+        with st.expander("🔍 Diagnóstico de Novedades 2", expanded=True):
+            if sistema.df_novedades_max_2 is not None:
+                st.write(f"✅ Novedades 2 cargado: {len(sistema.df_novedades_max_2)} registros")
+                st.write(f"📋 Columnas: {list(sistema.df_novedades_max_2.columns)}")
+                
+                if 'Persona' in sistema.df_novedades_max_2.columns and 'Fecha' in sistema.df_novedades_max_2.columns:
+                    st.write("📊 Muestra de datos:")
+                    st.dataframe(sistema.df_novedades_max_2[['Persona', 'Fecha']].head(10))
+                    
+                    # Mostrar fechas en el rango
+                    try:
+                        fechas = sistema.df_novedades_max_2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                        fechas_rango = fechas[
+                            (fechas >= fecha_inicio) & 
+                            (fechas <= fecha_fin)
+                        ]
+                        st.write(f"📊 Registros en el rango {fecha_inicio.strftime('%d/%m/%Y')} - {fecha_fin.strftime('%d/%m/%Y')}: {len(fechas_rango)}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Error al procesar fechas: {e}")
+                else:
+                    st.warning("⚠️ Columnas 'Persona' o 'Fecha' no encontradas")
+            else:
+                st.warning("⚠️ Novedades 2 no está cargado")
+        
+        # ============================================================
+        # CONSTRUIR MAPA DE NOMBRES
+        # ============================================================
+        
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
         st.success("✅ Mapa de nombres construido")
         
-        # Procesar novedades
+        # ============================================================
+        # PROCESAR NOVEDADES
+        # ============================================================
+        
         sistema.procesar_novedades()
-        st.success(f"✅ Novedades procesadas: {len(sistema.usuarios_novedades_2)} usuarios en Novedades 2")
+        
+        # Mostrar diagnóstico de usuarios en Novedades 2
+        st.write(f"📋 Usuarios en Novedades 2 en el rango: {len(sistema.usuarios_novedades_2)}")
+        
+        if sistema.usuarios_novedades_2:
+            st.write("📋 Usuarios:")
+            for usuario in sorted(sistema.usuarios_novedades_2):
+                st.write(f"   • {usuario}")
+        
+        # ============================================================
+        # VERIFICAR SI HAY USUARIOS
+        # ============================================================
         
         if not sistema.usuarios_novedades_2:
             st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
+            st.info("💡 Esto significa que no hay personas programadas para trabajar en este período.")
+            st.info("💡 Verifica que el archivo Template_Novedades_RRHH_MAX tenga datos en la hoja 'Novedades 2' para las fechas seleccionadas.")
             st.stop()
         
-        # Consolidar
+        # ============================================================
+        # CONSOLIDAR
+        # ============================================================
+        
         if not sistema.consolidar_todas_plataformas():
             st.error("❌ Error al consolidar datos")
             st.stop()
         st.success("✅ Datos consolidados")
         
-        # Resultados
+        # ============================================================
+        # RESULTADOS
+        # ============================================================
+        
         df_resultados = sistema.obtener_resultados()
         estadisticas = sistema.get_estadisticas()
         
