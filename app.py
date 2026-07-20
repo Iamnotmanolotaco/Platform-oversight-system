@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CORREGIDA (Novedades 2 SOLO para festivos)
+# app.py - REPORTE DE TIEMPOS CON TARJETAS CORREGIDAS
 
 import streamlit as st
 import pandas as pd
@@ -237,7 +237,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL (CORREGIDA)
+# CLASE PRINCIPAL
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -276,7 +276,7 @@ class ReporteTiemposSystem:
         self.mapa_nombres = {}
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
-        self.usuarios_novedades_2 = set()  # Usuarios que DEBEN trabajar en festivos
+        self.usuarios_novedades_2 = set()
         self.df_permisos_por_dia = None
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
@@ -670,7 +670,7 @@ class ReporteTiemposSystem:
         print("-"*70)
         
         # ============================================================
-        # USUARIOS A PROCESAR: TODOS los que tienen plataforma (no solo Novedades 2)
+        # USUARIOS A PROCESAR: TODOS los que tienen plataforma
         # ============================================================
         
         if not self.usuarios_con_plataforma:
@@ -699,8 +699,8 @@ class ReporteTiemposSystem:
                 'Dias_Activos': 0,
                 'Actividades': [],
                 'Permiso': None,
-                'Permiso_Dia_Especifico': {},  # Para festivos
-                'Novedad_2': 'No',  # Por defecto, no está en Novedades 2
+                'Permiso_Dia_Especifico': {},
+                'Novedad_2': 'No',
                 'Compañia': compania,
                 'Detalle_Diario': {dia: 0.0 for dia in dias_columnas},
                 'Jornada_Diaria': {dia: jornada for dia, jornada in [(f'Dia_{fecha.strftime("%d/%m")}', jornada) for fecha, jornada in dias_con_jornada]}
@@ -1253,26 +1253,46 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         )
         
         # ============================================================
-        # TARJETAS POR USUARIO
+        # TARJETAS POR USUARIO (CORREGIDAS)
         # ============================================================
         
         st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
         
+        # Mostrar tarjetas en un grid
         cols = st.columns(3)
+        
         for idx, (_, row) in enumerate(df_resultados.iterrows()):
             col = cols[idx % 3]
             
+            # Determinar color según estado
             if row['Incumplimiento']:
                 bg_color = '#fdedec'
                 border_color = '#e74c3c'
                 icono = '🚨'
+            elif row['Total_Horas'] == 0:
+                bg_color = '#f4f6f7'
+                border_color = '#95a5a6'
+                icono = '⛔'
             else:
                 bg_color = '#eafaf1'
                 border_color = '#27ae60'
                 icono = '✅'
             
-            # Mostrar si está en Novedades 2
-            festivo_tag = '📋 Festivo' if row['Novedad_2'] == 'Sí' else ''
+            # Determinar etiqueta de estado
+            estado_text = row['Estado']
+            if 'Completo' in estado_text:
+                estado_color = '#27ae60'
+            elif 'Parcial' in estado_text or 'Solo' in estado_text:
+                estado_color = '#f39c12'
+            elif 'Sin registro' in estado_text:
+                estado_color = '#95a5a6'
+            else:
+                estado_color = '#e74c3c'
+            
+            # Tag de festivo si aplica
+            festivo_tag = ''
+            if row['Novedad_2'] == 'Sí':
+                festivo_tag = '<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">📋 Festivo</span>'
             
             with col:
                 st.markdown(f"""
@@ -1283,9 +1303,9 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                     padding: 12px 16px;
                     margin-bottom: 10px;
                 ">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                         <div>
-                            <strong style="font-size: 14px;">{icono} {row['Usuario']}</strong>
+                            <span style="font-size: 14px; font-weight: 700; color: #1a2332;">{icono} {row['Usuario']}</span>
                             <span style="
                                 background: #e8e8e8;
                                 color: #333;
@@ -1295,17 +1315,18 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                                 font-weight: 600;
                                 margin-left: 5px;
                             ">{row['Compañia']}</span>
-                            {f'<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">{festivo_tag}</span>' if festivo_tag else ''}
+                            {festivo_tag}
                         </div>
                         <span style="font-size: 18px; font-weight: 800; color: {border_color};">{row['Total_Horas']:.1f}h</span>
                     </div>
                     <div style="font-size: 12px; color: #555; margin-top: 4px;">
                         CL: {row['Camp Legal']:.1f}h · SB: {row['Smokeball']:.1f}h · TG: {row['Toggl']:.1f}h
                     </div>
-                    <div style="font-size: 11px; color: #888; margin-top: 2px;">
-                        📅 {row['Dias_Activos']} días activos · {row['Estado']}
+                    <div style="font-size: 11px; color: #888; margin-top: 2px; display: flex; justify-content: space-between;">
+                        <span>📅 {row['Dias_Activos']} días activos</span>
+                        <span style="color: {estado_color}; font-weight: 600;">{row['Estado']}</span>
                     </div>
-                    {f'<div style="font-size: 11px; color: #c0392b; margin-top: 4px; font-weight: 600;">⚠️ {row["Incumplimiento_Detalle"]}</div>' if row['Incumplimiento'] else ''}
+                    {f'<div style="font-size: 11px; color: #c0392b; margin-top: 4px; font-weight: 600; border-top: 1px solid #f5c6cb; padding-top: 4px;">⚠️ {row["Incumplimiento_Detalle"]}</div>' if row['Incumplimiento'] else ''}
                 </div>
                 """, unsafe_allow_html=True)
         
