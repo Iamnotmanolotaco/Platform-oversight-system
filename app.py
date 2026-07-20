@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO CORREGIDO
+# app.py - REPORTE DE TIEMPOS CON TARJETAS Y DIAGNÓSTICO
 
 import streamlit as st
 import pandas as pd
@@ -240,7 +240,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL CON DIAGNÓSTICO
+# CLASE PRINCIPAL
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -286,14 +286,7 @@ class ReporteTiemposSystem:
         self.dias_habiles = self._calcular_dias_habiles()
         self.jornada_total_esperada = self._calcular_jornada_total()
         
-        self.diagnostico = {
-            'usuarios_verificados': [],
-            'plataformas': {}
-        }
-        
-        print(f"\n📅 Rango: {self.fecha_inicio.strftime('%d/%m/%Y')} - {self.fecha_fin.strftime('%d/%m/%Y')}")
-        print(f"📊 Días totales: {self.dias_totales} | Días hábiles: {self.dias_habiles}")
-        print(f"📊 Jornada total esperada: {self.jornada_total_esperada:.1f}h")
+        self.diagnostico = {}
     
     def _calcular_dias_habiles(self):
         dias = 0
@@ -331,28 +324,12 @@ class ReporteTiemposSystem:
             
             if key == 'powerbi':
                 self.df_powerbi = df
-                self.diagnostico['plataformas']['powerbi'] = {
-                    'registros': len(df),
-                    'columnas': list(df.columns)
-                }
             elif key == 'camp_legal':
                 self.df_camp = df
-                self.diagnostico['plataformas']['camp_legal'] = {
-                    'registros': len(df),
-                    'columnas': list(df.columns)
-                }
             elif key == 'smokeball':
                 self.df_smokeball = df
-                self.diagnostico['plataformas']['smokeball'] = {
-                    'registros': len(df),
-                    'columnas': list(df.columns)
-                }
             elif key == 'toggl':
                 self.df_toggl = df
-                self.diagnostico['plataformas']['toggl'] = {
-                    'registros': len(df),
-                    'columnas': list(df.columns)
-                }
             elif key == 'novedades_max':
                 self.df_novedades_max = df
             elif key == 'novedades_max_2':
@@ -372,12 +349,14 @@ class ReporteTiemposSystem:
         if not nombre_limpio:
             return nombre_limpio
         
+        # Buscar coincidencia exacta
         if nombre_limpio in self.mapa_nombres:
             return self.mapa_nombres[nombre_limpio]
         
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
+        # Buscar coincidencia parcial
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
             if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
@@ -536,6 +515,7 @@ class ReporteTiemposSystem:
         novedades_list = []
         permisos_por_dia = []
         
+        # NOVEDADES MAX (hoja 1)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -550,6 +530,7 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX (rango - permisos): {len(df_max_validos)} registros")
         
+        # NOVEDADES MAX 2 (hoja 2 - festivos)
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
@@ -585,6 +566,7 @@ class ReporteTiemposSystem:
             else:
                 print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
+        # NOVEDADES CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -926,9 +908,6 @@ class ReporteTiemposSystem:
             'incumplidores': len(df[df['Incumplimiento'] == True])
         }
 
-    def get_diagnostico(self):
-        return self.diagnostico
-
 # ============================================================
 # INTERFAZ STREAMLIT
 # ============================================================
@@ -958,13 +937,6 @@ st.markdown("""
     .card-metric.danger .value { color: #e74c3c; }
     .card-metric.success { border-top-color: #27ae60; }
     .card-metric.success .value { color: #27ae60; }
-    .diagnostico-box {
-        background: #f0f4f8;
-        border: 1px solid #d5dbe0;
-        padding: 12px 16px;
-        border-radius: 10px;
-        margin: 10px 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1104,18 +1076,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # ============================================================
-        # DIAGNÓSTICO DE ARCHIVOS CARGADOS
-        # ============================================================
-        
-        with st.expander("🔍 Diagnóstico de archivos cargados", expanded=True):
-            st.write("### 📊 Resumen de archivos cargados")
-            
-            for plataforma, info in sistema.diagnostico['plataformas'].items():
-                st.write(f"**{plataforma}:** {info['registros']} registros")
-                st.write(f"Columnas: {info['columnas']}")
-                st.write("---")
-        
         # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
@@ -1139,101 +1099,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         if df_resultados is None or df_resultados.empty:
             st.warning("⚠️ No se encontraron resultados")
             st.stop()
-        
-        # ============================================================
-        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS (CORREGIDO)
-        # ============================================================
-        
-        with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
-            
-            usuarios_a_verificar = [
-                'Gustavo Meneses', 'Amber Spelman', 'Angelly Castañeda', 
-                'Cristhian Medina', 'Daniela Squires', 'Delmin Salazar',
-                'Diana Carolina Moise', 'Diego Londoño', 'Gabriel Taborda',
-                'Joseph Hamilton', 'Juan David Quintero', 'Laura Valentina Bonilla',
-                'Luisa Segura', 'Maria Camila Acosta', 'Maria Lucia Mage',
-                'Marion Garcia', 'Marisol Tinajero', 'Monica Lopez Villamizar',
-                'Perlita Avila Casulla', 'Victor Zarate'
-            ]
-            
-            st.write("### 🔍 Verificando usuarios específicos")
-            
-            for usuario in usuarios_a_verificar:
-                st.write(f"---")
-                st.write(f"**👤 {usuario}**")
-                
-                # Buscar en Power BI
-                if sistema.df_powerbi is not None:
-                    col_nombre = 'NAME CORRECT'
-                    if col_nombre in sistema.df_powerbi.columns:
-                        usuario_pb = sistema.df_powerbi[sistema.df_powerbi[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
-                        if len(usuario_pb) > 0:
-                            st.success(f"✅ Encontrado en Power BI")
-                            st.dataframe(usuario_pb[[col_nombre, 'NAME CL', 'NAME SB', 'NAME TG', 'COMPANY']])
-                        else:
-                            st.warning(f"❌ No encontrado en Power BI")
-                
-                # Buscar en Camp Legal
-                if sistema.df_camp is not None:
-                    col_nombre = 'Staff Name'
-                    if col_nombre in sistema.df_camp.columns:
-                        usuario_camp = sistema.df_camp[sistema.df_camp[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
-                        if len(usuario_camp) > 0:
-                            horas_camp = usuario_camp['Hours Spent'].sum() if 'Hours Spent' in usuario_camp.columns else 0
-                            # Asegurar que horas_camp es float
-                            if isinstance(horas_camp, pd.Timedelta):
-                                horas_camp = horas_camp.total_seconds() / 3600
-                            st.success(f"✅ Encontrado en Camp Legal: {len(usuario_camp)} registros, {float(horas_camp):.1f} horas")
-                            st.dataframe(usuario_camp[[col_nombre, 'Hours Spent', 'Time Entry Date']].head(5))
-                        else:
-                            st.warning(f"❌ No encontrado en Camp Legal")
-                
-                # Buscar en Smokeball
-                if sistema.df_smokeball is not None:
-                    col_nombre = 'Name'
-                    if col_nombre in sistema.df_smokeball.columns:
-                        usuario_sb = sistema.df_smokeball[sistema.df_smokeball[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
-                        if len(usuario_sb) > 0:
-                            horas_sb = usuario_sb['Hours'].sum() if 'Hours' in usuario_sb.columns else 0
-                            if isinstance(horas_sb, pd.Timedelta):
-                                horas_sb = horas_sb.total_seconds() / 3600
-                            st.success(f"✅ Encontrado en Smokeball: {len(usuario_sb)} registros, {float(horas_sb):.1f} horas")
-                            st.dataframe(usuario_sb[[col_nombre, 'Hours', 'Date']].head(5))
-                        else:
-                            st.warning(f"❌ No encontrado en Smokeball")
-                
-                # Buscar en Toggl
-                if sistema.df_toggl is not None:
-                    col_nombre = 'Member'
-                    if col_nombre in sistema.df_toggl.columns:
-                        usuario_tg = sistema.df_toggl[sistema.df_toggl[col_nombre].str.contains(usuario.split()[0], case=False, na=False)]
-                        if len(usuario_tg) > 0:
-                            horas_tg = usuario_tg['Dur'].sum() if 'Dur' in usuario_tg.columns else 0
-                            if isinstance(horas_tg, pd.Timedelta):
-                                horas_tg = horas_tg.total_seconds() / 3600
-                            st.success(f"✅ Encontrado en Toggl: {len(usuario_tg)} registros, {float(horas_tg):.1f} horas")
-                            st.dataframe(usuario_tg[[col_nombre, 'Dur', 'Date1']].head(5))
-                        else:
-                            st.warning(f"❌ No encontrado en Toggl")
-                
-                # Normalizar nombre
-                nombre_normalizado = sistema.normalizar_nombre(usuario)
-                st.write(f"📋 Nombre normalizado: **{nombre_normalizado}**")
-                
-                # Verificar en el mapa
-                if nombre_normalizado in sistema.mapa_nombres:
-                    st.success(f"✅ Encontrado en el mapa de nombres")
-                else:
-                    st.warning(f"❌ No encontrado en el mapa de nombres")
-                
-                # Verificar en el DataFrame de resultados
-                if df_resultados is not None and len(df_resultados) > 0:
-                    usuario_resultado = df_resultados[df_resultados['Usuario'].str.contains(usuario.split()[0], case=False, na=False)]
-                    if len(usuario_resultado) > 0:
-                        st.success(f"✅ Encontrado en el reporte final")
-                        st.dataframe(usuario_resultado[['Usuario', 'Total_Horas', 'Camp Legal', 'Smokeball', 'Toggl', 'Estado']])
-                    else:
-                        st.warning(f"❌ No encontrado en el reporte final")
         
         # ============================================================
         # MOSTRAR RESULTADOS
@@ -1387,16 +1252,18 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         )
         
         # ============================================================
-        # TARJETAS POR USUARIO
+        # TARJETAS POR USUARIO (VERSIÓN CORREGIDA)
         # ============================================================
         
         st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
         
+        # Mostrar tarjetas en un grid
         cols = st.columns(3)
         
         for idx, (_, row) in enumerate(df_resultados.iterrows()):
             col = cols[idx % 3]
             
+            # Determinar colores según estado
             if row['Incumplimiento']:
                 bg_color = '#fdedec'
                 border_color = '#e74c3c'
@@ -1413,6 +1280,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                 estado_emoji = '✅'
                 estado_text = 'Cumple'
             
+            # Tag de festivo
             festivo_tag = ''
             if row['Novedad_2'] == 'Sí':
                 festivo_tag = '<span style="background: #f39c12; color: white; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 5px;">📋 Festivo</span>'
