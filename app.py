@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CORREGIDA (sin applymap)
+# app.py - VERSIÓN CORREGIDA CON COMPANY
 
 import streamlit as st
 import pandas as pd
@@ -23,7 +23,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# FUNCIONES DE CONVERSIÓN (DE TU CÓDIGO ORIGINAL)
+# FUNCIONES DE CONVERSIÓN
 # ============================================================
 
 def convertir_hora_tiempo(valor):
@@ -133,14 +133,12 @@ def convertir_fecha(valor, formato_fecha='%m/%d/%Y'):
         return None
 
 def es_festivo(fecha):
-    """Determina si una fecha es festivo"""
     festivos = [
         (1, 1), (5, 1), (7, 20), (8, 7), (12, 8), (12, 25)
     ]
     return (fecha.month, fecha.day) in festivos
 
 def get_jornada_esperada_por_dia(fecha):
-    """Retorna la jornada esperada para un día específico"""
     if fecha.weekday() == 5:  # Sábado
         return 4.0
     elif fecha.weekday() == 6:  # Domingo
@@ -200,7 +198,7 @@ COLUMNAS_MAPEO = {
             'nombre_sb': 'NAME SB',
             'nombre_tg': 'NAME TG',
             'status': 'USER STATUS',
-            'company': 'COMPANY'
+            'company': 'COMPANY'  # ← Esta es la columna que estamos buscando
         }
     },
     'novedades_max': {
@@ -315,7 +313,6 @@ class ReporteTiemposSystem:
         return dias
     
     def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
-        """Carga un archivo desde bytes (Streamlit)"""
         try:
             if sheet_name:
                 df = pd.read_excel(archivo_bytes, sheet_name=sheet_name)
@@ -324,6 +321,14 @@ class ReporteTiemposSystem:
             
             if key == 'powerbi':
                 self.df_powerbi = df
+                # ✅ Diagnóstico: Verificar que COMPANY existe
+                if 'COMPANY' in df.columns:
+                    print(f"✅ Columna COMPANY encontrada en Power BI")
+                    print(f"   Valores únicos: {df['COMPANY'].unique()}")
+                else:
+                    print(f"⚠️ Columna COMPANY NO encontrada en Power BI")
+                    print(f"   Columnas disponibles: {list(df.columns)}")
+            
             elif key == 'camp_legal':
                 self.df_camp = df
             elif key == 'smokeball':
@@ -358,12 +363,12 @@ class ReporteTiemposSystem:
         return nombre_limpio
     
     def obtener_compania(self, nombre):
-        """Obtiene la compañía de un usuario a partir de su nombre normalizado"""
         nombre_limpio = limpiar_nombre(nombre)
         return self.mapa_compania.get(nombre_limpio, 'Sin compañía')
     
     def construir_mapa_nombres(self):
         if self.df_powerbi is None:
+            st.error("❌ Power BI no está cargado")
             return False
         
         cols = COLUMNAS_MAPEO['powerbi']['columnas']
@@ -374,14 +379,29 @@ class ReporteTiemposSystem:
         col_status = cols.get('status', 'USER STATUS')
         col_company = cols.get('company', 'COMPANY')
         
+        # ✅ Verificar que la columna COMPANY existe
+        if col_company not in self.df_powerbi.columns:
+            st.warning(f"⚠️ Columna '{col_company}' no encontrada en Power BI")
+            st.write(f"📋 Columnas disponibles: {list(self.df_powerbi.columns)}")
+            # Buscar alternativas
+            for col in self.df_powerbi.columns:
+                if 'COMPANY' in col.upper() or 'EMPRESA' in col.upper():
+                    col_company = col
+                    st.success(f"✅ Usando columna alternativa: '{col_company}'")
+                    break
+        
         if col_status in self.df_powerbi.columns:
             df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
         else:
             df_activos = self.df_powerbi.copy()
+            st.warning(f"⚠️ Columna '{col_status}' no encontrada, usando todos los usuarios")
         
         self.mapa_nombres = {}
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
+        
+        # ✅ Contador de compañías para diagnóstico
+        companias_encontradas = {}
         
         for idx, row in df_activos.iterrows():
             nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
@@ -390,16 +410,19 @@ class ReporteTiemposSystem:
             
             nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
             
-            # Guardar compañía
+            # ✅ Guardar compañía
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
-                self.mapa_compania[nombre_canonico_limpio] = compania
-                self.mapa_compania[nombre_canonico] = compania
+                if compania:
+                    self.mapa_compania[nombre_canonico_limpio] = compania
+                    self.mapa_compania[nombre_canonico] = compania
+                    companias_encontradas[compania] = companias_encontradas.get(compania, 0) + 1
             
             tiene_cl = False
             tiene_sb = False
             tiene_tg = False
             
+            # NAME CL
             if col_cl in df_activos.columns and pd.notna(row[col_cl]):
                 valor = str(row[col_cl]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
@@ -407,8 +430,11 @@ class ReporteTiemposSystem:
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        self.mapa_compania[limpiar_nombre(valor)] = str(row[col_company]).strip()
+                        compania = str(row[col_company]).strip()
+                        if compania:
+                            self.mapa_compania[limpiar_nombre(valor)] = compania
             
+            # NAME SB
             if col_sb in df_activos.columns and pd.notna(row[col_sb]):
                 valor = str(row[col_sb]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
@@ -416,8 +442,11 @@ class ReporteTiemposSystem:
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        self.mapa_compania[limpiar_nombre(valor)] = str(row[col_company]).strip()
+                        compania = str(row[col_company]).strip()
+                        if compania:
+                            self.mapa_compania[limpiar_nombre(valor)] = compania
             
+            # NAME TG
             if col_tg in df_activos.columns and pd.notna(row[col_tg]):
                 valor = str(row[col_tg]).strip()
                 if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
@@ -425,7 +454,9 @@ class ReporteTiemposSystem:
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        self.mapa_compania[limpiar_nombre(valor)] = str(row[col_company]).strip()
+                        compania = str(row[col_company]).strip()
+                        if compania:
+                            self.mapa_compania[limpiar_nombre(valor)] = compania
             
             self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
             self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
@@ -433,11 +464,16 @@ class ReporteTiemposSystem:
             if tiene_cl or tiene_sb or tiene_tg:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
         
-        print(f"   ✅ Usuarios a incluir: {len(self.usuarios_con_plataforma)}")
-        print(f"   ✅ Compañías mapeadas: {len(self.mapa_compania)}")
+        # ✅ Mostrar diagnóstico de compañías
+        st.write(f"📊 Compañías encontradas: {companias_encontradas}")
+        st.write(f"✅ Usuarios a incluir: {len(self.usuarios_con_plataforma)}")
+        st.write(f"✅ Compañías mapeadas: {len(self.mapa_compania)}")
         
-        companias = set(self.mapa_compania.values())
-        print(f"   📋 Compañías encontradas: {companias}")
+        # ✅ Mostrar algunos ejemplos de mapeo de compañías
+        if self.mapa_compania:
+            st.write("📋 Ejemplos de mapeo de compañías:")
+            for i, (nombre, compania) in enumerate(list(self.mapa_compania.items())[:5]):
+                st.write(f"   • {nombre} → {compania}")
         
         return True
     
@@ -854,7 +890,7 @@ with st.sidebar:
     st.subheader("📁 Archivos")
     
     archivo_powerbi = st.file_uploader(
-        "📊 Power BI resources.xlsx",
+        "📊 Power BI resources.xlsx (Names)",
         type=['xlsx'],
         key="powerbi"
     )
@@ -959,33 +995,49 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        with st.expander("🔍 Diagnóstico de archivos cargados", expanded=True):
+        # ============================================================
+        # DIAGNÓSTICO DE POWER BI
+        # ============================================================
+        
+        with st.expander("🔍 Diagnóstico de Power BI", expanded=True):
             if sistema.df_powerbi is not None:
                 st.write(f"✅ Power BI: {len(sistema.df_powerbi)} registros")
-                if 'COMPANY' in sistema.df_powerbi.columns:
-                    companias = sistema.df_powerbi['COMPANY'].unique()
-                    st.write(f"   Compañías encontradas: {list(companias)}")
-            
-            if sistema.df_camp is not None:
-                st.write(f"✅ Camp Legal: {len(sistema.df_camp)} registros")
-            else:
-                st.warning("⚠️ Camp Legal NO cargado")
-            
-            if sistema.df_smokeball is not None:
-                st.write(f"✅ Smokeball: {len(sistema.df_smokeball)} registros")
-            else:
-                st.warning("⚠️ Smokeball NO cargado")
-            
-            if sistema.df_toggl is not None:
-                st.write(f"✅ Toggl: {len(sistema.df_toggl)} registros")
-            else:
-                st.warning("⚠️ Toggl NO cargado")
+                st.write(f"📋 Columnas: {list(sistema.df_powerbi.columns)}")
+                
+                # Buscar COMPANY
+                col_company = None
+                for col in ['COMPANY', 'COMPAÑIA', 'EMPRESA', 'Company', 'Compañía', 'Empresa']:
+                    if col in sistema.df_powerbi.columns:
+                        col_company = col
+                        break
+                
+                if col_company:
+                    st.success(f"✅ Columna COMPANY encontrada: '{col_company}'")
+                    valores = sistema.df_powerbi[col_company].unique()
+                    st.write(f"📊 Valores únicos: {list(valores)}")
+                    
+                    # Conteo
+                    conteo = sistema.df_powerbi[col_company].value_counts()
+                    st.write("📊 Conteo por compañía:")
+                    st.dataframe(conteo.reset_index().rename(columns={'index': 'Compañía', col_company: 'Cantidad'}))
+                    
+                    # Buscar a Deicy
+                    if 'NAME CORRECT' in sistema.df_powerbi.columns:
+                        deicy = sistema.df_powerbi[sistema.df_powerbi['NAME CORRECT'].str.contains('Deicy', case=False, na=False)]
+                        if len(deicy) > 0:
+                            st.write("🔍 Deicy Aurora Niño encontrada:")
+                            st.dataframe(deicy[['NAME CORRECT', col_company]])
+                else:
+                    st.warning("⚠️ No se encontró columna de COMPANY")
+                    st.write(f"📋 Columnas disponibles: {list(sistema.df_powerbi.columns)}")
         
+        # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
         st.success("✅ Mapa de nombres construido")
         
+        # Procesar novedades
         sistema.procesar_novedades()
         st.success(f"✅ Novedades procesadas: {len(sistema.usuarios_novedades_2)} usuarios en Novedades 2")
         
@@ -993,11 +1045,13 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
             st.stop()
         
+        # Consolidar
         if not sistema.consolidar_todas_plataformas():
             st.error("❌ Error al consolidar datos")
             st.stop()
         st.success("✅ Datos consolidados")
         
+        # Resultados
         df_resultados = sistema.obtener_resultados()
         estadisticas = sistema.get_estadisticas()
         
@@ -1074,7 +1128,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             """, unsafe_allow_html=True)
         
         # ============================================================
-        # TABLA CON COMPAÑÍA (SIN STYLE)
+        # TABLA
         # ============================================================
         
         st.markdown("### 👥 Detalle por Usuario")
@@ -1091,7 +1145,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         df_mostrar['⚠️ Incumple'] = df_mostrar['⚠️ Incumple'].apply(lambda x: '🚨 SÍ' if x else '✅ NO')
         
-        # Mostrar tabla simple (sin estilos complicados)
         st.dataframe(
             df_mostrar,
             use_container_width=True,
@@ -1154,7 +1207,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         )
         
         # ============================================================
-        # TARJETAS POR USUARIO CON COMPAÑÍA
+        # TARJETAS POR USUARIO
         # ============================================================
         
         st.markdown("### 📋 Detalle por Usuario (Tarjetas)")
