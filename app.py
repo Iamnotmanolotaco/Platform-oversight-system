@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CORREGIDA (Deicy y Rangos de fechas)
+# app.py - VERSIÓN CORREGIDA (NOVEDADES POR FECHA ESPECÍFICA)
 
 import streamlit as st
 import pandas as pd
@@ -276,6 +276,7 @@ class ReporteTiemposSystem:
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
+        self.df_permisos_por_dia = None  # DataFrame con permisos por día específico
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
@@ -321,8 +322,6 @@ class ReporteTiemposSystem:
             
             if key == 'powerbi':
                 self.df_powerbi = df
-                if 'COMPANY' in df.columns:
-                    print(f"✅ Columna COMPANY encontrada: {df['COMPANY'].unique()}")
             elif key == 'camp_legal':
                 self.df_camp = df
             elif key == 'smokeball':
@@ -347,21 +346,14 @@ class ReporteTiemposSystem:
         if not nombre_limpio:
             return nombre_limpio
         
-        # Buscar coincidencia exacta
         if nombre_limpio in self.mapa_nombres:
             return self.mapa_nombres[nombre_limpio]
         
-        # Buscar por nombre original
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
-        # Buscar coincidencia parcial (para casos como "Deicy Nino" vs "Deicy Aurora Niño")
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            # Si el nombre limpio está contenido en el nombre de la plataforma
-            if nombre_limpio.lower() in nombre_plat.lower():
-                return nombre_canon
-            # Si el nombre de la plataforma está contenido en el nombre limpio
-            if nombre_plat.lower() in nombre_limpio.lower():
+            if nombre_limpio.lower() in nombre_plat.lower() or nombre_plat.lower() in nombre_limpio.lower():
                 return nombre_canon
         
         return nombre_limpio
@@ -369,11 +361,9 @@ class ReporteTiemposSystem:
     def obtener_compania(self, nombre):
         nombre_limpio = limpiar_nombre(nombre)
         
-        # Buscar por coincidencia exacta
         if nombre_limpio in self.mapa_compania:
             return self.mapa_compania[nombre_limpio]
         
-        # Buscar por coincidencia parcial (para Deicy)
         for nombre_map, compania in self.mapa_compania.items():
             if nombre_limpio.lower() in nombre_map.lower() or nombre_map.lower() in nombre_limpio.lower():
                 return compania
@@ -393,13 +383,10 @@ class ReporteTiemposSystem:
         col_status = cols.get('status', 'USER STATUS')
         col_company = cols.get('company', 'COMPANY')
         
-        # Verificar que COMPANY existe
         if col_company not in self.df_powerbi.columns:
-            st.warning(f"⚠️ Columna '{col_company}' no encontrada")
             for col in self.df_powerbi.columns:
                 if 'COMPANY' in col.upper() or 'EMPRESA' in col.upper():
                     col_company = col
-                    st.success(f"✅ Usando columna alternativa: '{col_company}'")
                     break
         
         if col_status in self.df_powerbi.columns:
@@ -411,7 +398,6 @@ class ReporteTiemposSystem:
         self.mapa_compania = {}
         self.usuarios_con_plataforma = []
         
-        # Primero, construir el mapa de nombres y compañías
         for idx, row in df_activos.iterrows():
             nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
             if not nombre_canonico:
@@ -419,13 +405,11 @@ class ReporteTiemposSystem:
             
             nombre_canonico_limpio = limpiar_nombre(nombre_canonico)
             
-            # Guardar compañía para el nombre canónico
             if col_company in df_activos.columns and pd.notna(row[col_company]):
                 compania = str(row[col_company]).strip()
                 if compania:
                     self.mapa_compania[nombre_canonico_limpio] = compania
                     self.mapa_compania[nombre_canonico] = compania
-                    # Guardar también versiones cortas del nombre (para Deicy)
                     partes = nombre_canonico_limpio.split()
                     if len(partes) >= 2:
                         nombre_corto = f"{partes[0]} {partes[-1]}"
@@ -442,7 +426,6 @@ class ReporteTiemposSystem:
                         compania = str(row[col_company]).strip()
                         if compania:
                             self.mapa_compania[valor_limpio] = compania
-                            # Guardar versiones cortas
                             partes = valor_limpio.split()
                             if len(partes) >= 2:
                                 nombre_corto = f"{partes[0]} {partes[-1]}"
@@ -483,22 +466,12 @@ class ReporteTiemposSystem:
             self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
             self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
             
-            # Verificar si tiene plataforma
             tiene_cl = col_cl in df_activos.columns and pd.notna(row[col_cl]) and str(row[col_cl]).strip() not in ['', 'true', 'false', 'nan', 'none']
             tiene_sb = col_sb in df_activos.columns and pd.notna(row[col_sb]) and str(row[col_sb]).strip() not in ['', 'true', 'false', 'nan', 'none']
             tiene_tg = col_tg in df_activos.columns and pd.notna(row[col_tg]) and str(row[col_tg]).strip() not in ['', 'true', 'false', 'nan', 'none']
             
             if tiene_cl or tiene_sb or tiene_tg:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
-        
-        # Diagnóstico
-        st.write(f"📊 Compañías mapeadas: {len(self.mapa_compania)}")
-        st.write(f"📋 Compañías encontradas: {set(self.mapa_compania.values())}")
-        
-        # Buscar específicamente a Deicy
-        for nombre in self.mapa_compania.keys():
-            if 'deicy' in nombre.lower() or 'nino' in nombre.lower():
-                st.write(f"🔍 Encontrado: {nombre} → {self.mapa_compania[nombre]}")
         
         return True
     
@@ -508,7 +481,11 @@ class ReporteTiemposSystem:
         print("="*70)
         
         novedades_list = []
+        permisos_por_dia = []
         
+        # ============================================================
+        # NOVEDADES MAX (hoja 1) - Rango de fechas
+        # ============================================================
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -521,14 +498,17 @@ class ReporteTiemposSystem:
                 else:
                     df_max_validos['Tipo'] = 'Permiso MAX'
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ MAX: {len(df_max_validos)} registros")
+                print(f"   ✅ MAX (rango): {len(df_max_validos)} registros")
         
+        # ============================================================
+        # NOVEDADES MAX 2 (hoja 2) - Fecha específica (SOLO EL DÍA EXACTO)
+        # ============================================================
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
                 df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 
-                # Filtrar por rango de fechas
+                # Filtrar por el rango de fechas del reporte
                 if len(df_max2) > 0:
                     df_max2_filtrado = df_max2[
                         (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
@@ -537,27 +517,31 @@ class ReporteTiemposSystem:
                 else:
                     df_max2_filtrado = df_max2
                 
+                # Para Novedades 2, la fecha es específica (solo ese día)
+                # Guardamos como permiso por día específico
                 for _, row in df_max2_filtrado.iterrows():
                     nombre = row['Persona']
                     nombre_normalizado = self.normalizar_nombre(nombre)
-                    if nombre_normalizado:
+                    fecha = row['Fecha_Conv']
+                    tipo = row['Tipo de Novedad'] if 'Tipo de Novedad' in row else 'Novedad 2'
+                    
+                    if nombre_normalizado and pd.notna(fecha):
+                        # Agregar a la lista de usuarios que trabajan (Novedades 2)
                         self.usuarios_novedades_2.add(nombre_normalizado)
+                        # Guardar permiso para ese día específico
+                        permisos_por_dia.append({
+                            'Usuario': nombre_normalizado,
+                            'Fecha': fecha,
+                            'Tipo': tipo,
+                            'Es_Novedad_2': True
+                        })
                 
-                print(f"   ✅ Usuarios en Novedades 2 en el rango: {len(self.usuarios_novedades_2)}")
-                
-                df_max2_validos = df_max2_filtrado[df_max2_filtrado['Fecha_Conv'].notna()]
-                if 'Tipo de Novedad' in df_max2.columns:
-                    df_max2_validos['Tipo'] = df_max2_validos['Tipo de Novedad']
-                else:
-                    df_max2_validos['Tipo'] = 'Novedad 2'
-                df_max2_validos['Fecha_Inicio'] = df_max2_validos['Fecha_Conv']
-                df_max2_validos['Fecha_Fin'] = df_max2_validos['Fecha_Conv']
-                df_max2_validos['Usuario_Normalizado'] = df_max2_validos['Persona'].apply(self.normalizar_nombre)
-                novedades_list.append(df_max2_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ MAX 2: {len(df_max2_validos)} registros en el rango")
-            else:
-                print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
+                print(f"   ✅ MAX 2 (fecha específica): {len(df_max2_filtrado)} registros en el rango")
+                print(f"   ✅ Usuarios en Novedades 2 (deben trabajar): {len(self.usuarios_novedades_2)}")
         
+        # ============================================================
+        # NOVEDADES CLG - Rango de fechas
+        # ============================================================
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -570,16 +554,25 @@ class ReporteTiemposSystem:
                 else:
                     df_clg_validos['Tipo'] = 'Permiso CLG'
                 novedades_list.append(df_clg_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
-                print(f"   ✅ CLG: {len(df_clg_validos)} registros")
+                print(f"   ✅ CLG (rango): {len(df_clg_validos)} registros")
         
+        # Combinar todas las novedades de rango
         if novedades_list:
             self.df_novedades_combinadas = pd.concat(novedades_list, ignore_index=True)
-            print(f"   ✅ Total novedades combinadas: {len(self.df_novedades_combinadas)}")
+            print(f"   ✅ Total novedades combinadas (rango): {len(self.df_novedades_combinadas)}")
         else:
             self.df_novedades_combinadas = None
         
+        # Guardar permisos por día específico (Novedades 2)
+        if permisos_por_dia:
+            self.df_permisos_por_dia = pd.DataFrame(permisos_por_dia)
+            print(f"   ✅ Permisos por día específico (Novedades 2): {len(self.df_permisos_por_dia)}")
+        else:
+            self.df_permisos_por_dia = None
+        
+        # Mostrar usuarios en Novedades 2
         if self.usuarios_novedades_2:
-            print(f"\n   📋 Usuarios en Novedades 2:")
+            print(f"\n   📋 Usuarios en Novedades 2 (deben trabajar en el rango):")
             for usuario in sorted(self.usuarios_novedades_2):
                 compania = self.obtener_compania(usuario)
                 print(f"      • {usuario} ({compania})")
@@ -587,6 +580,7 @@ class ReporteTiemposSystem:
         return True
     
     def verificar_permiso(self, usuario, fecha):
+        """Verifica si un usuario tiene permiso en una fecha específica (rango)"""
         if self.df_novedades_combinadas is None:
             return None
         novedades_usuario = self.df_novedades_combinadas[
@@ -596,6 +590,21 @@ class ReporteTiemposSystem:
             if row['Fecha_Inicio'] <= fecha <= row['Fecha_Fin']:
                 return row['Tipo']
         return None
+    
+    def verificar_permiso_dia_especifico(self, usuario, fecha):
+        """Verifica si un usuario tiene permiso en un día específico (Novedades 2)"""
+        if self.df_permisos_por_dia is None:
+            return None
+        permisos = self.df_permisos_por_dia[
+            (self.df_permisos_por_dia['Usuario'] == usuario) & 
+            (self.df_permisos_por_dia['Fecha'] == fecha)
+        ]
+        if len(permisos) > 0:
+            return permisos.iloc[0]['Tipo']
+        return None
+    
+    def verificar_novedad_2(self, usuario):
+        return usuario in self.usuarios_novedades_2
     
     def procesar_plataforma(self, df, config_key):
         if df is None:
@@ -623,7 +632,6 @@ class ReporteTiemposSystem:
         except:
             df_proc['Date'] = self.fecha_inicio
         
-        # Filtrar por rango
         df_proc = df_proc[
             (df_proc['Date'] >= self.fecha_inicio) & 
             (df_proc['Date'] <= self.fecha_fin)
@@ -668,7 +676,6 @@ class ReporteTiemposSystem:
         print(f"📋 Usuarios en Novedades 2: {len(self.usuarios_novedades_2)}")
         print("-"*70)
         
-        # Si no hay usuarios en Novedades 2, retornar DataFrame vacío
         if not self.usuarios_novedades_2:
             print("⚠️ No hay usuarios en Novedades 2. El reporte estará vacío.")
             self.df_analisis = pd.DataFrame()
@@ -692,6 +699,7 @@ class ReporteTiemposSystem:
                 'Dias_Activos': 0,
                 'Actividades': [],
                 'Permiso': None,
+                'Permiso_Dia_Especifico': {},  # Permisos por día específico (Novedades 2)
                 'Novedad_2': 'Sí',
                 'Compañia': compania,
                 'Detalle_Diario': {dia: 0.0 for dia in dias_columnas},
@@ -718,14 +726,21 @@ class ReporteTiemposSystem:
         procesar_plataforma_detalle(df_sb, 'Smokeball')
         procesar_plataforma_detalle(df_tg, 'Toggl')
         
-        print("   🔍 Verificando permisos...")
+        print("   🔍 Verificando permisos por día...")
         for usuario in usuarios_dict:
             fecha_actual = self.fecha_inicio
             while fecha_actual <= self.fecha_fin:
-                permiso = self.verificar_permiso(usuario, fecha_actual)
-                if permiso:
-                    usuarios_dict[usuario]['Permiso'] = permiso
-                    break
+                # 1. Verificar permiso de rango (Novedades MAX y CLG)
+                permiso_rango = self.verificar_permiso(usuario, fecha_actual)
+                if permiso_rango:
+                    usuarios_dict[usuario]['Permiso'] = permiso_rango
+                
+                # 2. Verificar permiso de día específico (Novedades 2)
+                permiso_dia = self.verificar_permiso_dia_especifico(usuario, fecha_actual)
+                if permiso_dia:
+                    dia_key = f'Dia_{fecha_actual.strftime("%d/%m")}'
+                    usuarios_dict[usuario]['Permiso_Dia_Especifico'][dia_key] = permiso_dia
+                
                 fecha_actual += timedelta(days=1)
         
         datos = []
@@ -739,7 +754,10 @@ class ReporteTiemposSystem:
             for dia, horas in data['Detalle_Diario'].items():
                 jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
                 
-                if horas < jornada_esperada:
+                # Verificar si tiene permiso de día específico para este día
+                tiene_permiso_dia = dia in data['Permiso_Dia_Especifico']
+                
+                if horas < jornada_esperada and not tiene_permiso_dia:
                     fecha_str = dia.replace('Dia_', '')
                     try:
                         dia_obj = datetime.strptime(fecha_str, '%d/%m').replace(year=self.fecha_inicio.year)
@@ -753,9 +771,14 @@ class ReporteTiemposSystem:
                     except:
                         incumplimiento_diario.append(f"{dia}: {horas:.1f}h ❌")
                         dias_incumplidos.append(dia)
+                elif tiene_permiso_dia:
+                    # Si tiene permiso de día específico, no se considera incumplimiento
+                    permiso_tipo = data['Permiso_Dia_Especifico'][dia]
+                    incumplimiento_diario.append(f"{fecha_str}: {horas:.1f}h (Permiso: {permiso_tipo}) 📋")
             
             tiene_incumplimiento = len(dias_incumplidos) > 0
             
+            # Determinar estado final
             if data['Permiso']:
                 estado = f"📋 {data['Permiso']}"
             else:
@@ -765,7 +788,12 @@ class ReporteTiemposSystem:
             for dia, horas in data['Detalle_Diario'].items():
                 if horas > 0:
                     jornada_esperada = data['Jornada_Diaria'].get(dia, 8.0)
-                    if horas < jornada_esperada:
+                    tiene_permiso = dia in data['Permiso_Dia_Especifico']
+                    
+                    if tiene_permiso:
+                        permiso_tipo = data['Permiso_Dia_Especifico'][dia]
+                        detalle_items.append(f"{dia}: {horas:.1f}h (Permiso: {permiso_tipo}) 📋")
+                    elif horas < jornada_esperada:
                         detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h) ⚠️")
                     else:
                         detalle_items.append(f"{dia}: {horas:.1f}h (esperado {jornada_esperada:.0f}h)")
@@ -927,7 +955,7 @@ with st.sidebar:
         key="powerbi"
     )
     
-    st.caption("📌 Un solo archivo con dos hojas:\n- Novedades: Permisos generales\n- Novedades 2: Sábados y festivos")
+    st.caption("📌 Un solo archivo con dos hojas:\n- Novedades: Permisos (rango de fechas)\n- Novedades 2: Días específicos de trabajo")
     archivo_novedades_max = st.file_uploader(
         "📋 Template_Novedades_RRHH_MAX 1 1 2.xlsx",
         type=['xlsx'],
@@ -1027,14 +1055,10 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # ============================================================
-        # DIAGNÓSTICO
-        # ============================================================
-        
+        # Diagnóstico
         with st.expander("🔍 Diagnóstico de archivos", expanded=True):
             if sistema.df_powerbi is not None:
                 st.write(f"✅ Power BI: {len(sistema.df_powerbi)} registros")
-                st.write(f"📋 Columnas: {list(sistema.df_powerbi.columns)}")
                 
                 # Buscar COMPANY
                 col_company = None
@@ -1047,25 +1071,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                     st.success(f"✅ Columna COMPANY encontrada: '{col_company}'")
                     valores = sistema.df_powerbi[col_company].unique()
                     st.write(f"📊 Valores únicos: {list(valores)}")
-                    
-                    conteo = sistema.df_powerbi[col_company].value_counts()
-                    st.write("📊 Conteo por compañía:")
-                    st.dataframe(conteo.reset_index().rename(columns={'index': 'Compañía', col_company: 'Cantidad'}))
-                    
-                    # Buscar a Deicy
-                    if 'NAME CORRECT' in sistema.df_powerbi.columns:
-                        deicy = sistema.df_powerbi[sistema.df_powerbi['NAME CORRECT'].str.contains('Deicy', case=False, na=False)]
-                        if len(deicy) > 0:
-                            st.write("🔍 Deicy Aurora Niño encontrada:")
-                            st.dataframe(deicy[['NAME CORRECT', col_company]])
-                        else:
-                            # Buscar por "Nino"
-                            nino = sistema.df_powerbi[sistema.df_powerbi['NAME CORRECT'].str.contains('Nino', case=False, na=False)]
-                            if len(nino) > 0:
-                                st.write("🔍 Posible Deicy (contiene 'Nino'):")
-                                st.dataframe(nino[['NAME CORRECT', col_company]])
-                else:
-                    st.warning("⚠️ No se encontró columna de COMPANY")
         
         # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
@@ -1079,7 +1084,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         if not sistema.usuarios_novedades_2:
             st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
-            st.info("💡 Esto puede deberse a que no hay datos en el rango de fechas seleccionado.")
             st.stop()
         
         # Consolidar
