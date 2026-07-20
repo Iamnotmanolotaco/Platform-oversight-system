@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON COMPAÑÍA
+# app.py - VERSIÓN CORREGIDA (sin applymap)
 
 import streamlit as st
 import pandas as pd
@@ -200,7 +200,7 @@ COLUMNAS_MAPEO = {
             'nombre_sb': 'NAME SB',
             'nombre_tg': 'NAME TG',
             'status': 'USER STATUS',
-            'company': 'COMPANY'  # Agregamos COMPANY
+            'company': 'COMPANY'
         }
     },
     'novedades_max': {
@@ -275,7 +275,7 @@ class ReporteTiemposSystem:
         self.df_detalle_diario = None
         
         self.mapa_nombres = {}
-        self.mapa_compania = {}  # Diccionario para almacenar la compañía de cada usuario
+        self.mapa_compania = {}
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
         
@@ -313,10 +313,6 @@ class ReporteTiemposSystem:
                 dias.append((fecha_actual, jornada))
             fecha_actual += timedelta(days=1)
         return dias
-    
-    # ============================================================
-    # MÉTODO DE CARGA ADAPTADO PARA STREAMLIT
-    # ============================================================
     
     def cargar_archivo(self, archivo_bytes, key, sheet_name=None):
         """Carga un archivo desde bytes (Streamlit)"""
@@ -410,7 +406,6 @@ class ReporteTiemposSystem:
                     tiene_cl = True
                     self.mapa_nombres[valor] = nombre_canonico_limpio
                     self.mapa_nombres[limpiar_nombre(valor)] = nombre_canonico_limpio
-                    # Asignar compañía también a las variantes
                     if col_company in df_activos.columns and pd.notna(row[col_company]):
                         self.mapa_compania[limpiar_nombre(valor)] = str(row[col_company]).strip()
             
@@ -441,7 +436,6 @@ class ReporteTiemposSystem:
         print(f"   ✅ Usuarios a incluir: {len(self.usuarios_con_plataforma)}")
         print(f"   ✅ Compañías mapeadas: {len(self.mapa_compania)}")
         
-        # Mostrar resumen de compañías
         companias = set(self.mapa_compania.values())
         print(f"   📋 Compañías encontradas: {companias}")
         
@@ -454,7 +448,6 @@ class ReporteTiemposSystem:
         
         novedades_list = []
         
-        # Procesar Novedades MAX (rango de fechas)
         if self.df_novedades_max is not None:
             df_max = self.df_novedades_max.copy()
             if 'Persona' in df_max.columns and 'Fecha Inicio' in df_max.columns and 'Fecha Fin' in df_max.columns:
@@ -469,18 +462,15 @@ class ReporteTiemposSystem:
                 novedades_list.append(df_max_validos[['Usuario_Normalizado', 'Fecha_Inicio', 'Fecha_Fin', 'Tipo']])
                 print(f"   ✅ MAX: {len(df_max_validos)} registros")
         
-        # Procesar Novedades MAX 2 (fecha específica) - IMPORTANTE: extraer usuarios
         if self.df_novedades_max_2 is not None:
             df_max2 = self.df_novedades_max_2.copy()
             if 'Persona' in df_max2.columns and 'Fecha' in df_max2.columns:
-                # Filtrar por el rango de fechas del reporte
                 df_max2['Fecha_Conv'] = df_max2['Fecha'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
                 df_max2_filtrado = df_max2[
                     (df_max2['Fecha_Conv'] >= self.fecha_inicio) & 
                     (df_max2['Fecha_Conv'] <= self.fecha_fin)
                 ]
                 
-                # Extraer usuarios de Novedades 2
                 for _, row in df_max2_filtrado.iterrows():
                     nombre = row['Persona']
                     nombre_normalizado = self.normalizar_nombre(nombre)
@@ -489,7 +479,6 @@ class ReporteTiemposSystem:
                 
                 print(f"   ✅ Usuarios en Novedades 2 en el rango: {len(self.usuarios_novedades_2)}")
                 
-                # Procesar como novedad regular también
                 df_max2_validos = df_max2_filtrado[df_max2_filtrado['Fecha_Conv'].notna()]
                 if 'Tipo de Novedad' in df_max2.columns:
                     df_max2_validos['Tipo'] = df_max2_validos['Tipo de Novedad']
@@ -503,7 +492,6 @@ class ReporteTiemposSystem:
             else:
                 print(f"   ⚠️ Columnas 'Persona' o 'Fecha' no encontradas en Novedades 2")
         
-        # Procesar Novedades CLG
         if self.df_novedades_clg is not None:
             df_clg = self.df_novedades_clg.copy()
             if 'Persona' in df_clg.columns and 'Fecha Inicio' in df_clg.columns and 'Fecha Fin' in df_clg.columns:
@@ -524,7 +512,6 @@ class ReporteTiemposSystem:
         else:
             self.df_novedades_combinadas = None
         
-        # Mostrar usuarios de Novedades 2
         if self.usuarios_novedades_2:
             print(f"\n   📋 Usuarios en Novedades 2:")
             for usuario in sorted(self.usuarios_novedades_2):
@@ -543,9 +530,6 @@ class ReporteTiemposSystem:
             if row['Fecha_Inicio'] <= fecha <= row['Fecha_Fin']:
                 return row['Tipo']
         return None
-    
-    def verificar_novedad_2(self, usuario):
-        return usuario in self.usuarios_novedades_2
     
     def procesar_plataforma(self, df, config_key):
         if df is None:
@@ -681,10 +665,6 @@ class ReporteTiemposSystem:
             total = data['Camp Legal'] + data['Smokeball'] + data['Toggl']
             porcentaje = (total / self.jornada_total_esperada * 100) if self.jornada_total_esperada > 0 else 0
             
-            # ============================================================
-            # VALIDACIÓN DE INCUMPLIMIENTO POR DÍA
-            # ============================================================
-            
             incumplimiento_diario = []
             dias_incumplidos = []
             
@@ -745,13 +725,11 @@ class ReporteTiemposSystem:
         
         self.df_analisis = pd.DataFrame(datos)
         
-        # Ordenar por incumplimiento (los que incumplen primero)
         if len(self.df_analisis) > 0:
             self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
         
         print(f"\n✅ Usuarios en reporte: {len(self.df_analisis)}")
         
-        # Mostrar resumen de incumplimientos por compañía
         incumplidores = self.df_analisis[self.df_analisis['Incumplimiento'] == True]
         if len(incumplidores) > 0:
             print(f"⚠️ Usuarios con incumplimiento: {len(incumplidores)}")
@@ -843,18 +821,6 @@ st.markdown("""
     .card-metric.danger .value { color: #e74c3c; }
     .card-metric.success { border-top-color: #27ae60; }
     .card-metric.success .value { color: #27ae60; }
-    .card-compania {
-        background: white;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        display: inline-block;
-        font-size: 12px;
-        font-weight: 600;
-        margin: 2px;
-    }
-    .compania-max { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-    .compania-clg { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
-    .compania-other { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -968,7 +934,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
     try:
         sistema = ReporteTiemposSystem(fecha_inicio, fecha_fin)
         
-        # Cargar archivos
         if archivo_powerbi is not None:
             sistema.cargar_archivo(archivo_powerbi, 'powerbi')
             st.success("✅ Power BI cargado")
@@ -994,7 +959,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Diagnóstico
         with st.expander("🔍 Diagnóstico de archivos cargados", expanded=True):
             if sistema.df_powerbi is not None:
                 st.write(f"✅ Power BI: {len(sistema.df_powerbi)} registros")
@@ -1017,13 +981,11 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             else:
                 st.warning("⚠️ Toggl NO cargado")
         
-        # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
         st.success("✅ Mapa de nombres construido")
         
-        # Procesar novedades
         sistema.procesar_novedades()
         st.success(f"✅ Novedades procesadas: {len(sistema.usuarios_novedades_2)} usuarios en Novedades 2")
         
@@ -1031,13 +993,11 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.warning("⚠️ No hay usuarios en Novedades 2 para el rango seleccionado.")
             st.stop()
         
-        # Consolidar
         if not sistema.consolidar_todas_plataformas():
             st.error("❌ Error al consolidar datos")
             st.stop()
         st.success("✅ Datos consolidados")
         
-        # Resultados
         df_resultados = sistema.obtener_resultados()
         estadisticas = sistema.get_estadisticas()
         
@@ -1052,7 +1012,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         st.markdown("---")
         st.markdown("### 📊 Resultados del Reporte")
         
-        # Contar incumplidores
         incumplidores = df_resultados[df_resultados['Incumplimiento'] == True]
         if len(incumplidores) > 0:
             st.error(f"🚨 {len(incumplidores)} usuarios NO cumplieron con la jornada mínima")
@@ -1106,7 +1065,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             """, unsafe_allow_html=True)
         
         with col6:
-            # Mostrar compañías disponibles
             companias = df_resultados['Compañia'].unique()
             st.markdown(f"""
             <div class="card-metric" style="border-top-color: #9b59b6;">
@@ -1116,7 +1074,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             """, unsafe_allow_html=True)
         
         # ============================================================
-        # TABLA CON COMPAÑÍA
+        # TABLA CON COMPAÑÍA (SIN STYLE)
         # ============================================================
         
         st.markdown("### 👥 Detalle por Usuario")
@@ -1131,29 +1089,18 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             'Total Horas', 'Días Activos', 'Permiso', 'Estado', '⚠️ Incumple', 'Detalle Incumplimiento'
         ]
         
-        # Convertir columna de incumplimiento a texto
         df_mostrar['⚠️ Incumple'] = df_mostrar['⚠️ Incumple'].apply(lambda x: '🚨 SÍ' if x else '✅ NO')
         
-        # Aplicar estilo a la compañía
-        def style_compania(val):
-            if val == 'MAX':
-                return 'background-color: #d4edda; color: #155724; font-weight: bold;'
-            elif val == 'CLG':
-                return 'background-color: #cce5ff; color: #004085; font-weight: bold;'
-            else:
-                return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-        
-        styled_df = df_mostrar.style.applymap(style_compania, subset=['Compañia'])
-        
+        # Mostrar tabla simple (sin estilos complicados)
         st.dataframe(
-            styled_df,
+            df_mostrar,
             use_container_width=True,
             height=400,
             hide_index=True
         )
         
         # ============================================================
-        # FILTROS POR COMPAÑÍA
+        # FILTROS AVANZADOS
         # ============================================================
         
         with st.expander("🔍 Filtros avanzados"):
@@ -1225,17 +1172,6 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                 border_color = '#27ae60'
                 icono = '✅'
             
-            # Color de compañía
-            if row['Compañia'] == 'MAX':
-                comp_color = '#d4edda'
-                comp_text = '#155724'
-            elif row['Compañia'] == 'CLG':
-                comp_color = '#cce5ff'
-                comp_text = '#004085'
-            else:
-                comp_color = '#f8d7da'
-                comp_text = '#721c24'
-            
             with col:
                 st.markdown(f"""
                 <div style="
@@ -1249,8 +1185,8 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                         <div>
                             <strong style="font-size: 14px;">{icono} {row['Usuario']}</strong>
                             <span style="
-                                background: {comp_color};
-                                color: {comp_text};
+                                background: #e8e8e8;
+                                color: #333;
                                 padding: 1px 8px;
                                 border-radius: 10px;
                                 font-size: 10px;
