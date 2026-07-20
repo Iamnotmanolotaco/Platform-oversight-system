@@ -1,5 +1,3 @@
-# app.py - REPORTE DE TIEMPOS CON MAPEO MEJORADO DE NOMBRES
-
 import streamlit as st
 import pandas as pd
 import numpy as np
