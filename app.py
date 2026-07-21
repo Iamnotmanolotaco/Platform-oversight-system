@@ -1,4 +1,4 @@
-# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO COMPLETO
+# app.py - VERSIÓN CORREGIDA CON TODOS LOS USUARIOS
 
 import streamlit as st
 import pandas as pd
@@ -131,6 +131,9 @@ def normalizar_nombre_flexible(nombre):
     reemplazos = {
         'medinha': 'medina',
         'cristhian': 'cristian',
+        'castañeda': 'castaneda',
+        'londoño': 'londono',
+        'meneses': 'meneses',
     }
     
     nombre_lower = nombre_limpio.lower()
@@ -301,7 +304,6 @@ class ReporteTiemposSystem:
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
         self.df_permisos_por_dia = None
-        self.usuarios_manuales = set()
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
@@ -379,15 +381,12 @@ class ReporteTiemposSystem:
         if nombre.strip() in self.mapa_nombres:
             return self.mapa_nombres[nombre.strip()]
         
-        # Buscar coincidencia parcial (más flexible)
+        # Buscar coincidencia parcial
         for nombre_plat, nombre_canon in self.mapa_nombres.items():
-            # Si el nombre limpio está contenido en el nombre de la plataforma
             if nombre_limpio.lower() in nombre_plat.lower():
                 return nombre_canon
-            # Si el nombre de la plataforma está contenido en el nombre limpio
             if nombre_plat.lower() in nombre_limpio.lower():
                 return nombre_canon
-            # Si comparten la primera palabra (nombre)
             if ' ' in nombre_limpio and ' ' in nombre_plat:
                 if nombre_limpio.split()[0].lower() == nombre_plat.split()[0].lower():
                     return nombre_canon
@@ -410,171 +409,111 @@ class ReporteTiemposSystem:
     
     def construir_mapa_nombres(self):
         if self.df_powerbi is None:
-            st.error("❌ Power BI no está cargado")
-            return False
+            st.warning("⚠️ Power BI no está cargado. Se usarán nombres originales.")
         
-        cols = COLUMNAS_MAPEO['powerbi']['columnas']
-        col_canonico = cols.get('nombre', 'NAME CORRECT')
-        col_cl = cols.get('nombre_cl', 'NAME CL')
-        col_sb = cols.get('nombre_sb', 'NAME SB')
-        col_tg = cols.get('nombre_tg', 'NAME TG')
-        col_status = cols.get('status', 'USER STATUS')
-        col_company = cols.get('company', 'COMPANY')
-        
-        if col_company not in self.df_powerbi.columns:
-            for col in self.df_powerbi.columns:
-                if 'COMPANY' in col.upper() or 'EMPRESA' in col.upper():
-                    col_company = col
-                    break
-        
-        if col_status in self.df_powerbi.columns:
-            df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
-        else:
-            df_activos = self.df_powerbi.copy()
-        
+        # Construir mapa desde Power BI si existe
         self.mapa_nombres = {}
         self.mapa_compania = {}
+        
+        if self.df_powerbi is not None:
+            cols = COLUMNAS_MAPEO['powerbi']['columnas']
+            col_canonico = cols.get('nombre', 'NAME CORRECT')
+            col_cl = cols.get('nombre_cl', 'NAME CL')
+            col_sb = cols.get('nombre_sb', 'NAME SB')
+            col_tg = cols.get('nombre_tg', 'NAME TG')
+            col_status = cols.get('status', 'USER STATUS')
+            col_company = cols.get('company', 'COMPANY')
+            
+            if col_company not in self.df_powerbi.columns:
+                for col in self.df_powerbi.columns:
+                    if 'COMPANY' in col.upper() or 'EMPRESA' in col.upper():
+                        col_company = col
+                        break
+            
+            if col_status in self.df_powerbi.columns:
+                df_activos = self.df_powerbi[self.df_powerbi[col_status] == 'Active'].copy()
+            else:
+                df_activos = self.df_powerbi.copy()
+            
+            for idx, row in df_activos.iterrows():
+                nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
+                if not nombre_canonico:
+                    continue
+                
+                nombre_canonico_limpio = normalizar_nombre_flexible(nombre_canonico)
+                
+                if col_company in df_activos.columns and pd.notna(row[col_company]):
+                    compania = str(row[col_company]).strip()
+                    if compania:
+                        self.mapa_compania[nombre_canonico_limpio] = compania
+                        self.mapa_compania[nombre_canonico] = compania
+                
+                # NAME CL
+                if col_cl in df_activos.columns and pd.notna(row[col_cl]):
+                    valor = str(row[col_cl]).strip()
+                    if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
+                        valor_limpio = normalizar_nombre_flexible(valor)
+                        self.mapa_nombres[valor] = nombre_canonico_limpio
+                        self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
+                
+                # NAME SB
+                if col_sb in df_activos.columns and pd.notna(row[col_sb]):
+                    valor = str(row[col_sb]).strip()
+                    if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
+                        valor_limpio = normalizar_nombre_flexible(valor)
+                        self.mapa_nombres[valor] = nombre_canonico_limpio
+                        self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
+                
+                # NAME TG
+                if col_tg in df_activos.columns and pd.notna(row[col_tg]):
+                    valor = str(row[col_tg]).strip()
+                    if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
+                        valor_limpio = normalizar_nombre_flexible(valor)
+                        self.mapa_nombres[valor] = nombre_canonico_limpio
+                        self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
+                
+                self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
+                self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
+                
+                partes = nombre_canonico_limpio.split()
+                if len(partes) >= 2:
+                    nombre_corto = f"{partes[0]} {partes[-1]}"
+                    self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
+                if len(partes) >= 1:
+                    self.mapa_nombres[partes[0]] = nombre_canonico_limpio
+                    self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
+        
+        # ============================================================
+        # INCLUIR TODOS LOS USUARIOS DE CADA PLATAFORMA
+        # ============================================================
+        
         self.usuarios_con_plataforma = []
         
-        for idx, row in df_activos.iterrows():
-            nombre_canonico = str(row[col_canonico]).strip() if pd.notna(row[col_canonico]) else None
-            if not nombre_canonico:
-                continue
-            
-            nombre_canonico_limpio = normalizar_nombre_flexible(nombre_canonico)
-            
-            if col_company in df_activos.columns and pd.notna(row[col_company]):
-                compania = str(row[col_company]).strip()
-                if compania:
-                    self.mapa_compania[nombre_canonico_limpio] = compania
-                    self.mapa_compania[nombre_canonico] = compania
-                    partes = nombre_canonico_limpio.split()
-                    if len(partes) >= 2:
-                        nombre_corto = f"{partes[0]} {partes[-1]}"
-                        self.mapa_compania[nombre_corto] = compania
-                    if len(partes) >= 1:
-                        self.mapa_compania[partes[0]] = compania
-                        self.mapa_compania[partes[-1]] = compania
-            
-            # NAME CL
-            if col_cl in df_activos.columns and pd.notna(row[col_cl]):
-                valor = str(row[col_cl]).strip()
-                if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = normalizar_nombre_flexible(valor)
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
-                    partes = valor_limpio.split()
-                    if len(partes) >= 2:
-                        nombre_corto = f"{partes[0]} {partes[-1]}"
-                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
-                    if len(partes) >= 1:
-                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
-                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
-                    if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        compania = str(row[col_company]).strip()
-                        if compania:
-                            self.mapa_compania[valor_limpio] = compania
-            
-            # NAME SB
-            if col_sb in df_activos.columns and pd.notna(row[col_sb]):
-                valor = str(row[col_sb]).strip()
-                if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = normalizar_nombre_flexible(valor)
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
-                    partes = valor_limpio.split()
-                    if len(partes) >= 2:
-                        nombre_corto = f"{partes[0]} {partes[-1]}"
-                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
-                    if len(partes) >= 1:
-                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
-                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
-                    if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        compania = str(row[col_company]).strip()
-                        if compania:
-                            self.mapa_compania[valor_limpio] = compania
-            
-            # NAME TG
-            if col_tg in df_activos.columns and pd.notna(row[col_tg]):
-                valor = str(row[col_tg]).strip()
-                if valor and valor.lower() not in ['true', 'false', 'nan', 'none', '']:
-                    valor_limpio = normalizar_nombre_flexible(valor)
-                    self.mapa_nombres[valor] = nombre_canonico_limpio
-                    self.mapa_nombres[valor_limpio] = nombre_canonico_limpio
-                    partes = valor_limpio.split()
-                    if len(partes) >= 2:
-                        nombre_corto = f"{partes[0]} {partes[-1]}"
-                        self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
-                    if len(partes) >= 1:
-                        self.mapa_nombres[partes[0]] = nombre_canonico_limpio
-                        self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
-                    if col_company in df_activos.columns and pd.notna(row[col_company]):
-                        compania = str(row[col_company]).strip()
-                        if compania:
-                            self.mapa_compania[valor_limpio] = compania
-            
-            self.mapa_nombres[nombre_canonico] = nombre_canonico_limpio
-            self.mapa_nombres[nombre_canonico_limpio] = nombre_canonico_limpio
-            
-            partes = nombre_canonico_limpio.split()
-            if len(partes) >= 2:
-                nombre_corto = f"{partes[0]} {partes[-1]}"
-                self.mapa_nombres[nombre_corto] = nombre_canonico_limpio
-            if len(partes) >= 1:
-                self.mapa_nombres[partes[0]] = nombre_canonico_limpio
-                self.mapa_nombres[partes[-1]] = nombre_canonico_limpio
-            
-            tiene_cl = col_cl in df_activos.columns and pd.notna(row[col_cl]) and str(row[col_cl]).strip() not in ['', 'true', 'false', 'nan', 'none']
-            tiene_sb = col_sb in df_activos.columns and pd.notna(row[col_sb]) and str(row[col_sb]).strip() not in ['', 'true', 'false', 'nan', 'none']
-            tiene_tg = col_tg in df_activos.columns and pd.notna(row[col_tg]) and str(row[col_tg]).strip() not in ['', 'true', 'false', 'nan', 'none']
-            
-            if tiene_cl or tiene_sb or tiene_tg:
-                self.usuarios_con_plataforma.append(nombre_canonico_limpio)
-        
-        # ============================================================
-        # AGREGAR TODOS LOS USUARIOS DE TOGGL AUTOMÁTICAMENTE
-        # ============================================================
-        
+        # 1. Usuarios de Toggl
         if self.df_toggl is not None and 'Member' in self.df_toggl.columns:
-            st.write("### 🔧 Agregando usuarios de Toggl automáticamente")
-            
-            usuarios_toggl = self.df_toggl['Member'].dropna().unique()
-            st.write(f"**Usuarios encontrados en Toggl:** {len(usuarios_toggl)}")
-            
-            agregados = 0
-            for usuario in usuarios_toggl:
-                if isinstance(usuario, str):
-                    usuario_limpio = normalizar_nombre_flexible(usuario.strip())
-                    if usuario_limpio:
-                        if usuario_limpio not in self.usuarios_con_plataforma:
-                            # Buscar si hay un nombre similar en el mapa
-                            nombre_canon = None
-                            for nombre_plat, nombre_canonico in self.mapa_nombres.items():
-                                if (usuario_limpio.lower() in nombre_plat.lower() or 
-                                    nombre_plat.lower() in usuario_limpio.lower() or
-                                    (usuario_limpio.split()[0].lower() == nombre_plat.split()[0].lower() if ' ' in usuario_limpio and ' ' in nombre_plat else False) or
-                                    (usuario_limpio.split()[-1].lower() == nombre_plat.split()[-1].lower() if ' ' in usuario_limpio and ' ' in nombre_plat else False)):
-                                    nombre_canon = nombre_canonico
-                                    break
-                            
-                            if nombre_canon:
-                                self.mapa_nombres[usuario_limpio] = nombre_canon
-                                self.mapa_nombres[usuario] = nombre_canon
-                                self.usuarios_con_plataforma.append(nombre_canon)
-                            else:
-                                self.mapa_nombres[usuario_limpio] = usuario_limpio
-                                self.mapa_nombres[usuario] = usuario_limpio
-                                self.usuarios_con_plataforma.append(usuario_limpio)
-                                self.usuarios_manuales.add(usuario_limpio)
-                            
-                            agregados += 1
-                            st.write(f"   ✅ Agregado: {usuario} → {usuario_limpio}")
-            
-            st.write(f"**Total usuarios agregados de Toggl:** {agregados}")
-            st.write(f"**Total usuarios en plataforma:** {len(self.usuarios_con_plataforma)}")
-        else:
-            st.warning("⚠️ Toggl no está cargado o no tiene la columna 'Member'")
+            for nombre in self.df_toggl['Member'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre.strip())
+                    if nombre_limpio and nombre_limpio not in self.usuarios_con_plataforma:
+                        self.usuarios_con_plataforma.append(nombre_limpio)
         
+        # 2. Usuarios de Camp Legal
+        if self.df_camp is not None and 'Staff Name' in self.df_camp.columns:
+            for nombre in self.df_camp['Staff Name'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre.strip())
+                    if nombre_limpio and nombre_limpio not in self.usuarios_con_plataforma:
+                        self.usuarios_con_plataforma.append(nombre_limpio)
+        
+        # 3. Usuarios de Smokeball
+        if self.df_smokeball is not None and 'Name' in self.df_smokeball.columns:
+            for nombre in self.df_smokeball['Name'].dropna().unique():
+                if isinstance(nombre, str):
+                    nombre_limpio = normalizar_nombre_flexible(nombre.strip())
+                    if nombre_limpio and nombre_limpio not in self.usuarios_con_plataforma:
+                        self.usuarios_con_plataforma.append(nombre_limpio)
+        
+        print(f"✅ Total usuarios con plataforma: {len(self.usuarios_con_plataforma)}")
         return True
     
     def procesar_novedades(self):
@@ -908,6 +847,7 @@ class ReporteTiemposSystem:
         
         self.df_analisis = pd.DataFrame(datos)
         
+        # Ordenar: primero los que incumplen, luego por porcentaje
         if len(self.df_analisis) > 0:
             self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
         
@@ -1143,18 +1083,11 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Construir mapa de nombres (con inclusión automática de usuarios de Toggl)
+        # Construir mapa de nombres (incluye todos los usuarios de plataformas)
         if not sistema.construir_mapa_nombres():
-            st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
+            st.error("❌ Error al construir mapa de nombres.")
             st.stop()
-        st.success("✅ Mapa de nombres construido")
-        
-        # Mostrar usuarios agregados manualmente
-        if sistema.usuarios_manuales:
-            st.info(f"📋 Usuarios agregados manualmente desde Toggl: {len(sistema.usuarios_manuales)}")
-            with st.expander("📋 Usuarios agregados manualmente desde Toggl"):
-                for usuario in sorted(sistema.usuarios_manuales):
-                    st.write(f"• {usuario}")
+        st.success(f"✅ Mapa de nombres construido: {len(sistema.usuarios_con_plataforma)} usuarios identificados")
         
         # Procesar novedades
         sistema.procesar_novedades()
@@ -1175,147 +1108,32 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             st.stop()
         
         # ============================================================
-        # DIAGNÓSTICO DE USUARIOS ESPECÍFICOS
+        # DIAGNÓSTICO DE USUARIOS
         # ============================================================
         
-        with st.expander("🔍 Diagnóstico de usuarios específicos", expanded=True):
+        with st.expander("🔍 Diagnóstico de usuarios", expanded=True):
             
-            usuarios_a_verificar = [
-                'Gustavo Meneses', 'Amber Spelman', 'Angelly Castañeda', 
-                'Cristhian Medina', 'Daniela Squires', 'Delmin Salazar',
-                'Diana Carolina Moise', 'Diego Londoño', 'Gabriel Taborda',
-                'Joseph Hamilton', 'Juan David Quintero', 'Laura Valentina Bonilla',
-                'Luisa Segura', 'Maria Camila Acosta', 'Maria Lucia Mage',
-                'Marion Garcia', 'Marisol Tinajero', 'Monica Lopez Villamizar',
-                'Perlita Avila Casulla', 'Victor Zarate'
-            ]
+            st.write("### 📊 Resumen de usuarios por plataforma")
             
-            st.write("### 🔍 Verificando usuarios específicos")
+            # Usuarios por plataforma
+            usuarios_toggl = set()
+            if sistema.df_toggl is not None and 'Member' in sistema.df_toggl.columns:
+                usuarios_toggl = set(sistema.df_toggl['Member'].dropna().unique())
+                st.write(f"**Toggl:** {len(usuarios_toggl)} usuarios")
             
-            for usuario in usuarios_a_verificar:
-                st.write(f"---")
-                st.write(f"**👤 {usuario}**")
-                
-                # Buscar en el reporte final
-                if df_resultados is not None and len(df_resultados) > 0:
-                    usuario_resultado = df_resultados[df_resultados['Usuario'].str.contains(usuario.split()[0], case=False, na=False)]
-                    if len(usuario_resultado) > 0:
-                        st.success(f"✅ Encontrado en el reporte final")
-                        st.dataframe(usuario_resultado[['Usuario', 'Total_Horas', 'Camp Legal', 'Smokeball', 'Toggl', 'Estado']])
-                    else:
-                        st.warning(f"❌ NO encontrado en el reporte final")
-                        
-                        # Buscar en Toggl
-                        if sistema.df_toggl is not None and 'Member' in sistema.df_toggl.columns:
-                            tg_found = sistema.df_toggl[sistema.df_toggl['Member'].str.contains(usuario.split()[0], case=False, na=False)]
-                            if len(tg_found) > 0:
-                                # Convertir horas
-                                tg_found['Horas_Num'] = tg_found['Dur'].apply(convertir_hora_tiempo)
-                                horas = tg_found['Horas_Num'].sum()
-                                st.write(f"   Toggl: ✅ {horas:.2f} horas")
-                                
-                                # Mostrar fechas
-                                if 'Date1' in tg_found.columns:
-                                    tg_found['Date_Conv'] = tg_found['Date1'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                                    fechas = tg_found['Date_Conv'].dropna().unique()
-                                    st.write(f"   Fechas en Toggl: {sorted(fechas)[:5]}")
-                            else:
-                                st.write(f"   Toggl: ❌ No encontrado")
-                        
-                        # Buscar en Camp Legal
-                        if sistema.df_camp is not None and 'Staff Name' in sistema.df_camp.columns:
-                            camp_found = sistema.df_camp[sistema.df_camp['Staff Name'].str.contains(usuario.split()[0], case=False, na=False)]
-                            if len(camp_found) > 0:
-                                camp_found['Horas_Num'] = camp_found['Hours Spent'].apply(convertir_hora_tiempo)
-                                horas = camp_found['Horas_Num'].sum()
-                                st.write(f"   Camp Legal: ✅ {horas:.2f} horas")
-                            else:
-                                st.write(f"   Camp Legal: ❌ No encontrado")
-                        
-                        # Buscar en Smokeball
-                        if sistema.df_smokeball is not None and 'Name' in sistema.df_smokeball.columns:
-                            sb_found = sistema.df_smokeball[sistema.df_smokeball['Name'].str.contains(usuario.split()[0], case=False, na=False)]
-                            if len(sb_found) > 0:
-                                sb_found['Horas_Num'] = sb_found['Hours'].apply(convertir_hora_decimal)
-                                horas = sb_found['Horas_Num'].sum()
-                                st.write(f"   Smokeball: ✅ {horas:.2f} horas")
-                            else:
-                                st.write(f"   Smokeball: ❌ No encontrado")
+            usuarios_camp = set()
+            if sistema.df_camp is not None and 'Staff Name' in sistema.df_camp.columns:
+                usuarios_camp = set(sistema.df_camp['Staff Name'].dropna().unique())
+                st.write(f"**Camp Legal:** {len(usuarios_camp)} usuarios")
+            
+            usuarios_sb = set()
+            if sistema.df_smokeball is not None and 'Name' in sistema.df_smokeball.columns:
+                usuarios_sb = set(sistema.df_smokeball['Name'].dropna().unique())
+                st.write(f"**Smokeball:** {len(usuarios_sb)} usuarios")
+            
+            st.write(f"**Total usuarios únicos en plataformas:** {len(sistema.usuarios_con_plataforma)}")
+            st.write(f"**Usuarios en reporte final:** {len(df_resultados)}")
         
-        # ============================================================
-        # DIAGNÓSTICO ESPECÍFICO DE TOGGL
-        # ============================================================
-        
-        with st.expander("🔍 DIAGNÓSTICO ESPECÍFICO - TOGGL", expanded=True):
-            
-            st.write("### ⏱️ ANÁLISIS COMPLETO DE TOGGL")
-            
-            if sistema.df_toggl is not None:
-                st.write(f"**Total registros en Toggl:** {len(sistema.df_toggl)}")
-                
-                col_nombre = 'Member'
-                col_horas = 'Dur'
-                col_fecha = 'Date1'
-                
-                if col_nombre in sistema.df_toggl.columns:
-                    # Convertir horas y fechas
-                    sistema.df_toggl['Horas_Num'] = sistema.df_toggl[col_horas].apply(convertir_hora_tiempo)
-                    sistema.df_toggl['Date_Conv'] = sistema.df_toggl[col_fecha].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
-                    
-                    # Filtrar por rango
-                    df_rango = sistema.df_toggl[
-                        (sistema.df_toggl['Date_Conv'] >= fecha_inicio) & 
-                        (sistema.df_toggl['Date_Conv'] <= fecha_fin)
-                    ]
-                    
-                    st.write(f"**Registros en el rango del reporte:** {len(df_rango)}")
-                    
-                    if len(df_rango) > 0:
-                        # Agrupar por usuario
-                        df_agg = df_rango.groupby(col_nombre).agg({
-                            'Horas_Num': 'sum'
-                        }).reset_index().sort_values('Horas_Num', ascending=False)
-                        
-                        st.write("**Top 20 usuarios por horas en Toggl:**")
-                        st.dataframe(df_agg.head(20))
-                        
-                        # Verificar qué usuarios de Toggl NO están en el reporte
-                        usuarios_tg = set(df_agg[col_nombre].unique())
-                        usuarios_final = set(df_resultados['Usuario'].tolist()) if df_resultados is not None else set()
-                        
-                        # Normalizar para comparación
-                        usuarios_tg_norm = set()
-                        for u in usuarios_tg:
-                            if isinstance(u, str):
-                                u_norm = normalizar_nombre_flexible(u)
-                                usuarios_tg_norm.add(u_norm)
-                        
-                        usuarios_final_norm = set()
-                        for u in usuarios_final:
-                            if isinstance(u, str):
-                                u_norm = normalizar_nombre_flexible(u)
-                                usuarios_final_norm.add(u_norm)
-                        
-                        usuarios_faltantes = usuarios_tg_norm - usuarios_final_norm
-                        
-                        if usuarios_faltantes:
-                            st.warning(f"⚠️ {len(usuarios_faltantes)} usuarios de Toggl NO están en el reporte final:")
-                            
-                            for usuario_norm in sorted(usuarios_faltantes)[:20]:
-                                # Encontrar nombre original
-                                nombre_orig = None
-                                for u in usuarios_tg:
-                                    if isinstance(u, str) and normalizar_nombre_flexible(u) == usuario_norm:
-                                        nombre_orig = u
-                                        break
-                                
-                                if nombre_orig:
-                                    registros = df_rango[df_rango[col_nombre] == nombre_orig]
-                                    horas = registros['Horas_Num'].sum()
-                                    dias = registros['Date_Conv'].nunique()
-                                    st.write(f"• {nombre_orig} → {usuario_norm}: {horas:.2f}h ({dias} días)")
-                        else:
-                            st.success("✅ Todos los usuarios de Toggl están en el reporte final")
         # ============================================================
         # MOSTRAR RESULTADOS
         # ============================================================
