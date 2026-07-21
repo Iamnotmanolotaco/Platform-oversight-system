@@ -1,4 +1,4 @@
-# app.py - VERSIÓN COMPLETA CON SOLUCIÓN PARA CRISTHIAN MEDINA Y OTROS USUARIOS
+# app.py - REPORTE DE TIEMPOS CON DIAGNÓSTICO COMPLETO
 
 import streamlit as st
 import pandas as pd
@@ -301,7 +301,7 @@ class ReporteTiemposSystem:
         self.usuarios_con_plataforma = []
         self.usuarios_novedades_2 = set()
         self.df_permisos_por_dia = None
-        self.usuarios_manuales = set()  # Usuarios agregados manualmente
+        self.usuarios_manuales = set()
         
         self.dias_totales = (self.fecha_fin - self.fecha_inicio).days + 1
         self.dias_habiles = self._calcular_dias_habiles()
@@ -532,67 +532,48 @@ class ReporteTiemposSystem:
                 self.usuarios_con_plataforma.append(nombre_canonico_limpio)
         
         # ============================================================
-        # AGREGAR USUARIOS MANUALMENTE (LOS QUE APARECEN EN PLATAFORMAS PERO NO EN POWER BI)
+        # AGREGAR TODOS LOS USUARIOS DE TOGGL AUTOMÁTICAMENTE
         # ============================================================
         
-        st.write("### 🔧 Agregando usuarios manualmente desde plataformas")
-        
-        # Obtener usuarios de Toggl
-        usuarios_toggl = set()
         if self.df_toggl is not None and 'Member' in self.df_toggl.columns:
-            for nombre in self.df_toggl['Member'].dropna().unique():
-                if isinstance(nombre, str):
-                    nombre_limpio = normalizar_nombre_flexible(nombre)
-                    if nombre_limpio:
-                        usuarios_toggl.add(nombre_limpio)
-        
-        # Obtener usuarios de Camp Legal
-        usuarios_camp = set()
-        if self.df_camp is not None and 'Staff Name' in self.df_camp.columns:
-            for nombre in self.df_camp['Staff Name'].dropna().unique():
-                if isinstance(nombre, str):
-                    nombre_limpio = normalizar_nombre_flexible(nombre)
-                    if nombre_limpio:
-                        usuarios_camp.add(nombre_limpio)
-        
-        # Obtener usuarios de Smokeball
-        usuarios_sb = set()
-        if self.df_smokeball is not None and 'Name' in self.df_smokeball.columns:
-            for nombre in self.df_smokeball['Name'].dropna().unique():
-                if isinstance(nombre, str):
-                    nombre_limpio = normalizar_nombre_flexible(nombre)
-                    if nombre_limpio:
-                        usuarios_sb.add(nombre_limpio)
-        
-        # Combinar todos los usuarios de plataformas
-        todos_usuarios_plataforma = usuarios_toggl.union(usuarios_camp).union(usuarios_sb)
-        
-        # Agregar al mapa de nombres y a usuarios_con_plataforma
-        agregados = 0
-        for usuario in todos_usuarios_plataforma:
-            if usuario and usuario not in self.mapa_nombres:
-                # Buscar si hay un nombre canónico similar
-                nombre_canon = None
-                for nombre_plat, nombre_canonico in self.mapa_nombres.items():
-                    if (usuario.lower() in nombre_plat.lower() or 
-                        nombre_plat.lower() in usuario.lower() or
-                        usuario.split()[0].lower() == nombre_plat.split()[0].lower() or
-                        usuario.split()[-1].lower() == nombre_plat.split()[-1].lower()):
-                        nombre_canon = nombre_canonico
-                        break
-                
-                if nombre_canon:
-                    self.mapa_nombres[usuario] = nombre_canon
-                else:
-                    self.mapa_nombres[usuario] = usuario
-                    if usuario not in self.usuarios_con_plataforma:
-                        self.usuarios_con_plataforma.append(usuario)
-                        self.usuarios_manuales.add(usuario)
-                        agregados += 1
-                        st.write(f"   ✅ Agregado: {usuario}")
-        
-        st.write(f"   Total usuarios agregados manualmente: {agregados}")
-        st.write(f"   Total usuarios en plataforma: {len(self.usuarios_con_plataforma)}")
+            st.write("### 🔧 Agregando usuarios de Toggl automáticamente")
+            
+            usuarios_toggl = self.df_toggl['Member'].dropna().unique()
+            st.write(f"**Usuarios encontrados en Toggl:** {len(usuarios_toggl)}")
+            
+            agregados = 0
+            for usuario in usuarios_toggl:
+                if isinstance(usuario, str):
+                    usuario_limpio = normalizar_nombre_flexible(usuario.strip())
+                    if usuario_limpio:
+                        if usuario_limpio not in self.usuarios_con_plataforma:
+                            # Buscar si hay un nombre similar en el mapa
+                            nombre_canon = None
+                            for nombre_plat, nombre_canonico in self.mapa_nombres.items():
+                                if (usuario_limpio.lower() in nombre_plat.lower() or 
+                                    nombre_plat.lower() in usuario_limpio.lower() or
+                                    (usuario_limpio.split()[0].lower() == nombre_plat.split()[0].lower() if ' ' in usuario_limpio and ' ' in nombre_plat else False) or
+                                    (usuario_limpio.split()[-1].lower() == nombre_plat.split()[-1].lower() if ' ' in usuario_limpio and ' ' in nombre_plat else False)):
+                                    nombre_canon = nombre_canonico
+                                    break
+                            
+                            if nombre_canon:
+                                self.mapa_nombres[usuario_limpio] = nombre_canon
+                                self.mapa_nombres[usuario] = nombre_canon
+                                self.usuarios_con_plataforma.append(nombre_canon)
+                            else:
+                                self.mapa_nombres[usuario_limpio] = usuario_limpio
+                                self.mapa_nombres[usuario] = usuario_limpio
+                                self.usuarios_con_plataforma.append(usuario_limpio)
+                                self.usuarios_manuales.add(usuario_limpio)
+                            
+                            agregados += 1
+                            st.write(f"   ✅ Agregado: {usuario} → {usuario_limpio}")
+            
+            st.write(f"**Total usuarios agregados de Toggl:** {agregados}")
+            st.write(f"**Total usuarios en plataforma:** {len(self.usuarios_con_plataforma)}")
+        else:
+            st.warning("⚠️ Toggl no está cargado o no tiene la columna 'Member'")
         
         return True
     
@@ -1162,7 +1143,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Construir mapa de nombres (con inclusión manual de usuarios)
+        # Construir mapa de nombres (con inclusión automática de usuarios de Toggl)
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres. Verifica Power BI.")
             st.stop()
@@ -1170,8 +1151,8 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         # Mostrar usuarios agregados manualmente
         if sistema.usuarios_manuales:
-            st.info(f"📋 Usuarios agregados manualmente: {len(sistema.usuarios_manuales)}")
-            with st.expander("📋 Usuarios agregados manualmente"):
+            st.info(f"📋 Usuarios agregados manualmente desde Toggl: {len(sistema.usuarios_manuales)}")
+            with st.expander("📋 Usuarios agregados manualmente desde Toggl"):
                 for usuario in sorted(sistema.usuarios_manuales):
                     st.write(f"• {usuario}")
         
@@ -1224,34 +1205,117 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
                     else:
                         st.warning(f"❌ NO encontrado en el reporte final")
                         
-                        # Buscar en cada plataforma
-                        # Toggl
+                        # Buscar en Toggl
                         if sistema.df_toggl is not None and 'Member' in sistema.df_toggl.columns:
                             tg_found = sistema.df_toggl[sistema.df_toggl['Member'].str.contains(usuario.split()[0], case=False, na=False)]
                             if len(tg_found) > 0:
-                                horas = tg_found['Dur'].apply(convertir_hora_tiempo).sum()
+                                # Convertir horas
+                                tg_found['Horas_Num'] = tg_found['Dur'].apply(convertir_hora_tiempo)
+                                horas = tg_found['Horas_Num'].sum()
                                 st.write(f"   Toggl: ✅ {horas:.2f} horas")
+                                
+                                # Mostrar fechas
+                                if 'Date1' in tg_found.columns:
+                                    tg_found['Date_Conv'] = tg_found['Date1'].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                                    fechas = tg_found['Date_Conv'].dropna().unique()
+                                    st.write(f"   Fechas en Toggl: {sorted(fechas)[:5]}")
                             else:
                                 st.write(f"   Toggl: ❌ No encontrado")
                         
-                        # Camp Legal
+                        # Buscar en Camp Legal
                         if sistema.df_camp is not None and 'Staff Name' in sistema.df_camp.columns:
                             camp_found = sistema.df_camp[sistema.df_camp['Staff Name'].str.contains(usuario.split()[0], case=False, na=False)]
                             if len(camp_found) > 0:
-                                horas = camp_found['Hours Spent'].apply(convertir_hora_tiempo).sum()
+                                camp_found['Horas_Num'] = camp_found['Hours Spent'].apply(convertir_hora_tiempo)
+                                horas = camp_found['Horas_Num'].sum()
                                 st.write(f"   Camp Legal: ✅ {horas:.2f} horas")
                             else:
                                 st.write(f"   Camp Legal: ❌ No encontrado")
                         
-                        # Smokeball
+                        # Buscar en Smokeball
                         if sistema.df_smokeball is not None and 'Name' in sistema.df_smokeball.columns:
                             sb_found = sistema.df_smokeball[sistema.df_smokeball['Name'].str.contains(usuario.split()[0], case=False, na=False)]
                             if len(sb_found) > 0:
-                                horas = sb_found['Hours'].apply(convertir_hora_decimal).sum()
+                                sb_found['Horas_Num'] = sb_found['Hours'].apply(convertir_hora_decimal)
+                                horas = sb_found['Horas_Num'].sum()
                                 st.write(f"   Smokeball: ✅ {horas:.2f} horas")
                             else:
                                 st.write(f"   Smokeball: ❌ No encontrado")
         
+        # ============================================================
+        # DIAGNÓSTICO ESPECÍFICO DE TOGGL
+        # ============================================================
+        
+        with st.expander("🔍 DIAGNÓSTICO ESPECÍFICO - TOGGL", expanded=True):
+            
+            st.write("### ⏱️ ANÁLISIS COMPLETO DE TOGGL")
+            
+            if sistema.df_toggl is not None:
+                st.write(f"**Total registros en Toggl:** {len(sistema.df_toggl)}")
+                
+                col_nombre = 'Member'
+                col_horas = 'Dur'
+                col_fecha = 'Date1'
+                
+                if col_nombre in sistema.df_toggl.columns:
+                    # Convertir horas y fechas
+                    sistema.df_toggl['Horas_Num'] = sistema.df_toggl[col_horas].apply(convertir_hora_tiempo)
+                    sistema.df_toggl['Date_Conv'] = sistema.df_toggl[col_fecha].apply(lambda x: convertir_fecha(x, '%m/%d/%Y'))
+                    
+                    # Filtrar por rango
+                    df_rango = sistema.df_toggl[
+                        (sistema.df_toggl['Date_Conv'] >= fecha_inicio) & 
+                        (sistema.df_toggl['Date_Conv'] <= fecha_fin)
+                    ]
+                    
+                    st.write(f"**Registros en el rango del reporte:** {len(df_rango)}")
+                    
+                    if len(df_rango) > 0:
+                        # Agrupar por usuario
+                        df_agg = df_rango.groupby(col_nombre).agg({
+                            'Horas_Num': 'sum'
+                        }).reset_index().sort_values('Horas_Num', ascending=False)
+                        
+                        st.write("**Top 20 usuarios por horas en Toggl:**")
+                        st.dataframe(df_agg.head(20))
+                        
+                        # Verificar qué usuarios de Toggl NO están en el reporte
+                        usuarios_tg = set(df_agg[col_nombre].unique())
+                        usuarios_final = set(df_resultados['Usuario'].tolist()) if df_resultados is not None else set()
+                        
+                        # Normalizar para comparación
+                        usuarios_tg_norm = set()
+                        for u in usuarios_tg:
+                            if isinstance(u, str):
+                                u_norm = normalizar_nombre_flexible(u)
+                                usuarios_tg_norm.add(u_norm)
+                        
+                        usuarios_final_norm = set()
+                        for u in usuarios_final:
+                            if isinstance(u, str):
+                                u_norm = normalizar_nombre_flexible(u)
+                                usuarios_final_norm.add(u_norm)
+                        
+                        usuarios_faltantes = usuarios_tg_norm - usuarios_final_norm
+                        
+                        if usuarios_faltantes:
+                            st.warning(f"⚠️ {len(usuarios_faltantes)} usuarios de Toggl NO están en el reporte final:")
+                            
+                            for usuario_norm in sorted(usuarios_faltantes)[:20]:
+                                # Encontrar nombre original
+                                nombre_orig = None
+                                for u in usuarios_tg:
+                                    if isinstance(u, str) and normalizar_nombre_flexible(u) == usuario_norm:
+                                        nombre_orig = u
+                                        break
+                                
+                                if nombre_orig:
+                                    registros = df_rango[df_rango[col_nombre] == nombre_orig]
+                                    horas = registros['Horas_Num'].sum()
+                                    dias = registros['Date_Conv'].nunique()
+                                    st.write(f"• {nombre_orig} → {usuario_norm}: {horas:.2f}h ({dias} días)")
+                        else:
+                            st.success("✅ Todos los usuarios de Toggl están en el reporte final")
         # ============================================================
         # MOSTRAR RESULTADOS
         # ============================================================
