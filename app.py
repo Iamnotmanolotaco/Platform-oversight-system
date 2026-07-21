@@ -1,4 +1,4 @@
-# app.py - VERSIÓN CORREGIDA CON TODOS LOS USUARIOS
+# app.py - VERSIÓN ANTERIOR (v28) CON TARJETAS FUNCIONANDO
 
 import streamlit as st
 import pandas as pd
@@ -133,7 +133,6 @@ def normalizar_nombre_flexible(nombre):
         'cristhian': 'cristian',
         'castañeda': 'castaneda',
         'londoño': 'londono',
-        'meneses': 'meneses',
     }
     
     nombre_lower = nombre_limpio.lower()
@@ -263,7 +262,7 @@ COLUMNAS_MAPEO = {
 }
 
 # ============================================================
-# CLASE PRINCIPAL
+# CLASE PRINCIPAL (VERSIÓN ANTERIOR - v28)
 # ============================================================
 
 class ReporteTiemposSystem:
@@ -411,7 +410,6 @@ class ReporteTiemposSystem:
         if self.df_powerbi is None:
             st.warning("⚠️ Power BI no está cargado. Se usarán nombres originales.")
         
-        # Construir mapa desde Power BI si existe
         self.mapa_nombres = {}
         self.mapa_compania = {}
         
@@ -847,7 +845,6 @@ class ReporteTiemposSystem:
         
         self.df_analisis = pd.DataFrame(datos)
         
-        # Ordenar: primero los que incumplen, luego por porcentaje
         if len(self.df_analisis) > 0:
             self.df_analisis = self.df_analisis.sort_values(['Incumplimiento', 'Porcentaje'], ascending=[False, True])
         
@@ -1083,7 +1080,7 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
             sistema.cargar_archivo(archivo_tg, 'toggl', sheet_name='DataBaseToggl')
             st.success("✅ Toggl cargado (DataBaseToggl)")
         
-        # Construir mapa de nombres (incluye todos los usuarios de plataformas)
+        # Construir mapa de nombres
         if not sistema.construir_mapa_nombres():
             st.error("❌ Error al construir mapa de nombres.")
             st.stop()
@@ -1113,23 +1110,25 @@ with st.spinner("🔄 Procesando datos... Por favor espera"):
         
         with st.expander("🔍 Diagnóstico de usuarios", expanded=True):
             
-            st.write("### 📊 Resumen de usuarios por plataforma")
+            st.write("### 📊 Usuarios en cada plataforma")
             
-            # Usuarios por plataforma
-            usuarios_toggl = set()
+            # Toggl
             if sistema.df_toggl is not None and 'Member' in sistema.df_toggl.columns:
                 usuarios_toggl = set(sistema.df_toggl['Member'].dropna().unique())
                 st.write(f"**Toggl:** {len(usuarios_toggl)} usuarios")
+                st.dataframe(pd.DataFrame(sorted(usuarios_toggl), columns=['Usuario']))
             
-            usuarios_camp = set()
+            # Camp Legal
             if sistema.df_camp is not None and 'Staff Name' in sistema.df_camp.columns:
                 usuarios_camp = set(sistema.df_camp['Staff Name'].dropna().unique())
                 st.write(f"**Camp Legal:** {len(usuarios_camp)} usuarios")
+                st.dataframe(pd.DataFrame(sorted(usuarios_camp), columns=['Usuario']))
             
-            usuarios_sb = set()
+            # Smokeball
             if sistema.df_smokeball is not None and 'Name' in sistema.df_smokeball.columns:
                 usuarios_sb = set(sistema.df_smokeball['Name'].dropna().unique())
                 st.write(f"**Smokeball:** {len(usuarios_sb)} usuarios")
+                st.dataframe(pd.DataFrame(sorted(usuarios_sb), columns=['Usuario']))
             
             st.write(f"**Total usuarios únicos en plataformas:** {len(sistema.usuarios_con_plataforma)}")
             st.write(f"**Usuarios en reporte final:** {len(df_resultados)}")
