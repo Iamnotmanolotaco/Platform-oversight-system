@@ -323,7 +323,7 @@ def process_files(
         ascending=False
     )
 
-active_users = (
+    active_users = (
     df_names[
         df_names["USER STATUS"]
         .astype(str)
