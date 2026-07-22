@@ -4,9 +4,9 @@ import numpy as np
 import plotly.express as px
 import unicodedata
 
-# =====================================================
-# CONFIGURACION
-# =====================================================
+# ==================================================
+# CONFIG
+# ==================================================
 
 st.set_page_config(
     page_title="Time Control Platform",
@@ -16,17 +16,11 @@ st.set_page_config(
 
 MINIMUM_DAILY_HOURS = 8
 
-# =====================================================
-# FUNCIONES
-# =====================================================
+# ==================================================
+# FUNCTIONS
+# ==================================================
 
 def normalize_name(text):
-    """
-    Normaliza nombres para hacer matching:
-    - Mayúsculas
-    - Sin tildes
-    - Sin espacios dobles
-    """
 
     if pd.isna(text):
         return ""
@@ -45,22 +39,15 @@ def normalize_name(text):
 
 
 def build_user_mapping(df_names):
-    """
-    Crea diccionario de homologación usando NAME TG
-    """
 
     mappings = []
 
     for _, row in df_names.iterrows():
 
         correct_name = row.get("NAME CORRECT")
-
-        if pd.isna(correct_name):
-            continue
-
         tg_name = row.get("NAME TG")
 
-        if pd.notna(tg_name):
+        if pd.notna(correct_name) and pd.notna(tg_name):
 
             mappings.append(
                 {
@@ -69,12 +56,10 @@ def build_user_mapping(df_names):
                 }
             )
 
-    map_df = pd.DataFrame(mappings)
-
-    if len(map_df) == 0:
+    if len(mappings) == 0:
         return {}
 
-    map_df = map_df.drop_duplicates()
+    map_df = pd.DataFrame(mappings)
 
     return dict(
         zip(
@@ -84,28 +69,35 @@ def build_user_mapping(df_names):
     )
 
 
-def convert_duration_to_hours(value):
-    """
-    Convierte la columna Dur de Excel a horas.
-    Dur llega como fracción de día.
-    """
+def convert_duration_to_hours(duration):
 
     try:
-        return float(value) * 24
-    except:
+
+        td = pd.to_timedelta(str(duration))
+
+        return round(
+            td.total_seconds() / 3600,
+            4
+        )
+
+    except Exception:
+
         return 0
 
 
 @st.cache_data
 def process_files(
+
     toggl_file,
     resources_file,
     start_date,
     end_date
+
 ):
-    # =====================================================
-    # LEER ARCHIVOS
-    # =====================================================
+
+    # =========================================
+    # READ FILES
+    # =========================================
 
     df_toggl = pd.read_excel(
         toggl_file,
@@ -119,15 +111,15 @@ def process_files(
         engine="openpyxl"
     )
 
-    # =====================================================
-    # MAPEO DE USUARIOS
-    # =====================================================
+    # =========================================
+    # USER MAP
+    # =========================================
 
     user_map = build_user_mapping(df_names)
 
-    # =====================================================
-    # NORMALIZAR NOMBRES
-    # =====================================================
+    # =========================================
+    # NORMALIZE USERS
+    # =========================================
 
     df_toggl["NORMALIZED_MEMBER"] = (
         df_toggl["Member"]
@@ -141,18 +133,18 @@ def process_files(
         .fillna(df_toggl["Member"])
     )
 
-    # =====================================================
-    # FECHA
-    # =====================================================
+    # =========================================
+    # DATE
+    # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(
         df_toggl["Date1"],
         errors="coerce"
     )
 
-    # =====================================================
-    # FILTRO FECHAS
-    # =====================================================
+    # =========================================
+    # FILTER DATES
+    # =========================================
 
     df_toggl = df_toggl[
         (df_toggl["Date1"] >= pd.to_datetime(start_date))
@@ -160,23 +152,26 @@ def process_files(
         (df_toggl["Date1"] <= pd.to_datetime(end_date))
     ]
 
-    # =====================================================
-    # HORAS
-    # =====================================================
+    # =========================================
+    # HOURS
+    # =========================================
 
     df_toggl["Hours"] = (
-        df_toggl["Dur"]
+        df_toggl["Duration"]
         .apply(convert_duration_to_hours)
     )
 
-    # =====================================================
-    # RESUMEN DIARIO
-    # =====================================================
+    # =========================================
+    # DAILY REPORT
+    # =========================================
 
     daily_report = (
         df_toggl
         .groupby(
-            ["Date1", "USER_CORRECT"],
+            [
+                "Date1",
+                "USER_CORRECT"
+            ],
             as_index=False
         )
         .agg(
@@ -184,9 +179,10 @@ def process_files(
         )
     )
 
-    # =====================================================
-    # ESTADO CUMPLIMIENTO
-    # =====================================================
+    daily_report["Total_Hours"] = (
+        daily_report["Total_Hours"]
+        .round(2)
+    )
 
     daily_report["Status"] = np.where(
         daily_report["Total_Hours"] >= MINIMUM_DAILY_HOURS,
@@ -194,11 +190,11 @@ def process_files(
         "❌ Does Not Comply"
     )
 
-    # =====================================================
-    # INFORMACION ORGANIZACIONAL
-    # =====================================================
+    # =========================================
+    # EMPLOYEE INFO
+    # =========================================
 
-    master = (
+    employee_info = (
         df_names[
             [
                 "NAME CORRECT",
@@ -211,35 +207,64 @@ def process_files(
     )
 
     daily_report = daily_report.merge(
-        master,
+        employee_info,
         left_on="USER_CORRECT",
         right_on="NAME CORRECT",
         how="left"
     )
 
-    # =====================================================
-    # DETALLE ACTIVIDADES
-    # =====================================================
+    # =========================================
+    # USER SUMMARY
+    # =========================================
 
-    detail_report = df_toggl.copy()
+    users_summary = (
+        df_toggl
+        .groupby("USER_CORRECT")
+        .agg(
+            Total_Hours=("Hours", "sum"),
+            Entries=("Hours", "count")
+        )
+        .reset_index()
+    )
 
-    return daily_report, detail_report
+    users_summary["Total_Hours"] = (
+        users_summary["Total_Hours"]
+        .round(2)
+    )
 
+    users_summary = users_summary.merge(
+        employee_info,
+        left_on="USER_CORRECT",
+        right_on="NAME CORRECT",
+        how="left"
+    )
 
-# =====================================================
+    users_summary = users_summary.sort_values(
+        "Total_Hours",
+        ascending=False
+    )
+
+    return (
+        daily_report,
+        df_toggl,
+        users_summary
+    )
+
+# ==================================================
 # HEADER
-# =====================================================
+# ==================================================
 
 st.title("⏱️ Time Control Platform")
+
 st.markdown(
-    "### Fase 1 - Validación de tiempos Toggl"
+    "### Phase 1 - Toggl Validation"
 )
 
-# =====================================================
+# ==================================================
 # SIDEBAR
-# =====================================================
+# ==================================================
 
-st.sidebar.header("Archivos")
+st.sidebar.header("Upload Files")
 
 resources_file = st.sidebar.file_uploader(
     "Power BI Resources",
@@ -247,171 +272,152 @@ resources_file = st.sidebar.file_uploader(
 )
 
 toggl_file = st.sidebar.file_uploader(
-    "Archivo Toggl",
+    "Toggl File",
     type=["xlsx"]
 )
 
-st.sidebar.markdown("---")
+st.sidebar.divider()
 
 start_date = st.sidebar.date_input(
-    "Fecha Inicial",
+    "Start Date",
     pd.Timestamp("2026-07-01")
 )
 
 end_date = st.sidebar.date_input(
-    "Fecha Final",
+    "End Date",
     pd.Timestamp("2026-07-31")
 )
 
-# =====================================================
-# CARGA DE DATOS
-# =====================================================
+# ==================================================
+# PROCESS
+# ==================================================
 
 if resources_file and toggl_file:
 
-    daily_report, detail_report = process_files(
+    daily_report, detail_report, users_summary = process_files(
         toggl_file,
         resources_file,
         start_date,
         end_date
     )
 
-    # =====================================================
-    # KPIs
-    # =====================================================
+    total_users = users_summary["USER_CORRECT"].nunique()
 
-    total_users = (
-        daily_report["USER_CORRECT"]
-        .nunique()
-    )
+    compliant_days = (
+        daily_report["Status"]
+        == "✅ Comply"
+    ).sum()
 
-    compliant_users = (
-        daily_report[
-            daily_report["Status"] == "✅ Comply"
-        ]["USER_CORRECT"]
-        .nunique()
-    )
-
-    non_compliant_users = (
-        daily_report[
-            daily_report["Status"] == "❌ Does Not Comply"
-        ]["USER_CORRECT"]
-        .nunique()
-    )
+    non_compliant_days = (
+        daily_report["Status"]
+        == "❌ Does Not Comply"
+    ).sum()
 
     total_hours = round(
-        daily_report["Total_Hours"].sum(),
+        users_summary["Total_Hours"].sum(),
         2
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
 
-    col1.metric(
-        "Usuarios",
+    c1.metric(
+        "Users",
         total_users
     )
 
-    col2.metric(
-        "Cumplen",
-        compliant_users
+    c2.metric(
+        "Compliant Days",
+        compliant_days
     )
 
-    col3.metric(
-        "No Cumplen",
-        non_compliant_users
+    c3.metric(
+        "Non Compliant Days",
+        non_compliant_days
     )
 
-    col4.metric(
-        "Horas Totales",
+    c4.metric(
+        "Total Hours",
         total_hours
     )
 
-    st.divider()
-
-    # =====================================================
+    # =====================================
     # TABS
-    # =====================================================
+    # =====================================
 
-    tab1, tab2 = st.tabs(
+    tab1, tab2, tab3 = st.tabs(
         [
+            "👥 Users Summary",
             "✅ Daily Compliance",
             "📋 Activity Detail"
         ]
     )
 
-    # =====================================================
-    # TAB 1
-    # =====================================================
+    # =====================================
+    # USERS SUMMARY
+    # =====================================
 
     with tab1:
 
         st.subheader(
-            "Resumen Diario de Cumplimiento"
+            "Total Hours by User"
         )
 
+        st.dataframe(
+            users_summary[
+                [
+                    "USER_CORRECT",
+                    "COMPANY",
+                    "DEPARTMENT",
+                    "TEAM",
+                    "Entries",
+                    "Total_Hours"
+                ]
+            ],
+            use_container_width=True
+        )
+
+        fig_users = px.bar(
+            users_summary.head(25),
+            x="USER_CORRECT",
+            y="Total_Hours",
+            title="Top Users by Hours"
+        )
+
+        st.plotly_chart(
+            fig_users,
+            use_container_width=True
+        )
+
+    # =====================================
+    # DAILY COMPLIANCE
+    # =====================================
+
+    with tab2:
+
         status_filter = st.selectbox(
-            "Filtrar Estado",
+            "Status Filter",
             [
-                "Todos",
+                "All",
                 "✅ Comply",
                 "❌ Does Not Comply"
             ]
         )
 
-        display_df = daily_report.copy()
+        report = daily_report.copy()
 
-        if status_filter != "Todos":
+        if status_filter != "All":
 
-            display_df = display_df[
-                display_df["Status"] == status_filter
+            report = report[
+                report["Status"]
+                == status_filter
             ]
 
-        # =====================================================
-        # GRAFICO
-        # =====================================================
-
-        chart_df = (
-            display_df
-            .groupby("USER_CORRECT")["Total_Hours"]
-            .sum()
-            .reset_index()
-            .sort_values(
-                "Total_Hours",
-                ascending=False
-            )
-            .head(20)
-        )
-
-        if len(chart_df) > 0:
-
-            fig = px.bar(
-                chart_df,
-                x="USER_CORRECT",
-                y="Total_Hours",
-                title="Horas registradas por usuario"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-        # =====================================================
-        # TABLA RESUMEN
-        # =====================================================
-
-        display_df["Date1"] = (
-            display_df["Date1"]
-            .dt.strftime("%Y-%m-%d")
-        )
-
         st.dataframe(
-            display_df[
+            report[
                 [
                     "Date1",
                     "USER_CORRECT",
                     "COMPANY",
-                    "DEPARTMENT",
                     "TEAM",
                     "Total_Hours",
                     "Status"
@@ -420,67 +426,37 @@ if resources_file and toggl_file:
             use_container_width=True
         )
 
-        csv = display_df.to_csv(
-            index=False
-        ).encode("utf-8")
+    # =====================================
+    # DETAIL
+    # =====================================
 
-        st.download_button(
-            label="⬇ Descargar Resumen",
-            data=csv,
-            file_name="daily_report.csv",
-            mime="text/csv"
-        )
-
-    # =====================================================
-    # TAB 2
-    # =====================================================
-
-    with tab2:
+    with tab3:
 
         st.subheader(
-            "Detalle de Actividades"
-        )
-
-        detail_view = detail_report.copy()
-
-        detail_view["Date1"] = (
-            pd.to_datetime(
-                detail_view["Date1"]
-            )
-            .dt.strftime("%Y-%m-%d")
+            "Activity Detail"
         )
 
         st.dataframe(
-            detail_view[
+            detail_report[
                 [
                     "Date1",
                     "USER_CORRECT",
                     "Project (Activity)",
+                    "Duration",
                     "Hours"
                 ]
             ],
             use_container_width=True
         )
 
-        detail_csv = detail_view.to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-            label="⬇ Descargar Detalle",
-            data=detail_csv,
-            file_name="activity_detail.csv",
-            mime="text/csv"
-        )
-
-    # =====================================================
-    # INCUMPLIMIENTOS
-    # =====================================================
+    # =====================================
+    # NON COMPLIANCE
+    # =====================================
 
     st.divider()
 
     st.subheader(
-        "🚨 Usuarios que NO Cumplen"
+        "🚨 Non Compliant Records"
     )
 
     non_compliance = daily_report[
@@ -504,5 +480,5 @@ if resources_file and toggl_file:
 else:
 
     st.info(
-        "Cargue el archivo de Toggl y el archivo Power BI Resources para comenzar."
+        "Upload both files to begin."
     )
