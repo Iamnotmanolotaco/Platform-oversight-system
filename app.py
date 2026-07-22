@@ -161,7 +161,7 @@ def process_files(
 
     
 
-df_novelties = pd.read_excel(
+    df_novelties = pd.read_excel(
         novelties_file,
         sheet_name="Novedades",
         engine="openpyxl"
