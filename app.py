@@ -488,7 +488,7 @@ compliance_engine = pd.DataFrame(
     compliance_records
 )
 
-    return (
+return (
         daily_report,
         df_toggl,
         users_summary,
