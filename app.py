@@ -69,9 +69,23 @@ def build_user_mapping(df_names):
     )
 
 
+
 def convert_duration_to_hours(duration):
 
-    
+    try:
+
+        td = pd.to_timedelta(str(duration))
+
+        return round(
+            td.total_seconds() / 3600,
+            4
+        )
+
+    except Exception:
+
+        return 0
+
+
 def get_novelty_status(
     user,
     target_date,
@@ -102,6 +116,7 @@ def get_novelty_status(
         ]
 
     return None
+
 
     try:
 
