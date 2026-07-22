@@ -1,5 +1,5 @@
 streamlit
 pandas
-openpyxl
 numpy
-python-dateutil
+openpyxl
+plotly
