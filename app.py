@@ -485,7 +485,7 @@ for current_day in all_dates:
         )
 
 compliance_engine = pd.DataFrame(
-    compliance_records
+        compliance_records
 )
 
 return (
