@@ -549,13 +549,12 @@ if (
     and novelties_file
 ):
 
-
-daily_report, detail_report, users_summary, compliance_engine = process_files(
-    toggl_file,
-    resources_file,
-    novelties_file,
-    start_date,
-    end_date
+    daily_report, detail_report, users_summary, compliance_engine = process_files(
+        toggl_file,
+        resources_file,
+        novelties_file,
+        start_date,
+        end_date
 )
 
 
