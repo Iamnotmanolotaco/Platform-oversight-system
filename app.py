@@ -160,32 +160,34 @@ def process_files(
     )
 
     
+
 df_novelties = pd.read_excel(
-    novelties_file,
-    sheet_name="Novedades",
-    engine="openpyxl"
-)
+        novelties_file,
+        sheet_name="Novedades",
+        engine="openpyxl"
+    )
 
-df_special_days = pd.read_excel(
-    novelties_file,
-    sheet_name="Novedades 2",
-    engine="openpyxl"
-)
+    df_special_days = pd.read_excel(
+        novelties_file,
+        sheet_name="Novedades 2",
+        engine="openpyxl"
+    )
 
-df_novelties["Fecha Inicio"] = pd.to_datetime(
-    df_novelties["Fecha Inicio"],
-    errors="coerce"
-)
+    df_novelties["Fecha Inicio"] = pd.to_datetime(
+        df_novelties["Fecha Inicio"],
+        errors="coerce"
+    )
 
-df_novelties["Fecha Fin"] = pd.to_datetime(
-    df_novelties["Fecha Fin"],
-    errors="coerce"
-)
+    df_novelties["Fecha Fin"] = pd.to_datetime(
+        df_novelties["Fecha Fin"],
+        errors="coerce"
+    )
 
-df_special_days["Fecha"] = pd.to_datetime(
-    df_special_days["Fecha"],
-    errors="coerce"
-)
+    df_special_days["Fecha"] = pd.to_datetime(
+        df_special_days["Fecha"],
+        errors="coerce"
+    )
+
 
 
     # =========================================
