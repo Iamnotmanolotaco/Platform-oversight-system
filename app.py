@@ -71,6 +71,38 @@ def build_user_mapping(df_names):
 
 def convert_duration_to_hours(duration):
 
+    
+def get_novelty_status(
+    user,
+    target_date,
+    df_novelties
+):
+
+    result = df_novelties[
+        (
+            df_novelties["Persona"]
+            == user
+        )
+        &
+        (
+            df_novelties["Fecha Inicio"]
+            <= target_date
+        )
+        &
+        (
+            df_novelties["Fecha Fin"]
+            >= target_date
+        )
+    ]
+
+    if len(result) > 0:
+
+        return result.iloc[0][
+            "Tipo de Novedad"
+        ]
+
+    return None
+
     try:
 
         td = pd.to_timedelta(str(duration))
@@ -86,14 +118,15 @@ def convert_duration_to_hours(duration):
 
 
 @st.cache_data
-def process_files(
 
+def process_files(
     toggl_file,
     resources_file,
+    novelties_file,
     start_date,
     end_date
-
 ):
+
 
     # =========================================
     # READ FILES
@@ -110,6 +143,35 @@ def process_files(
         sheet_name="Names",
         engine="openpyxl"
     )
+
+    
+df_novelties = pd.read_excel(
+    novelties_file,
+    sheet_name="Novedades",
+    engine="openpyxl"
+)
+
+df_special_days = pd.read_excel(
+    novelties_file,
+    sheet_name="Novedades 2",
+    engine="openpyxl"
+)
+
+df_novelties["Fecha Inicio"] = pd.to_datetime(
+    df_novelties["Fecha Inicio"],
+    errors="coerce"
+)
+
+df_novelties["Fecha Fin"] = pd.to_datetime(
+    df_novelties["Fecha Fin"],
+    errors="coerce"
+)
+
+df_special_days["Fecha"] = pd.to_datetime(
+    df_special_days["Fecha"],
+    errors="coerce"
+)
+
 
     # =========================================
     # USER MAP
@@ -244,10 +306,176 @@ def process_files(
         ascending=False
     )
 
+active_users = (
+    df_names[
+        df_names["USER STATUS"]
+        .astype(str)
+        .str.upper()
+        .eq("ACTIVE")
+    ]
+    ["NAME CORRECT"]
+    .dropna()
+    .unique()
+)
+
+all_dates = pd.date_range(
+    start=start_date,
+    end=end_date,
+    freq="D"
+)
+
+compliance_records = []
+
+for current_day in all_dates:
+
+    weekday = current_day.weekday()
+
+    for user in active_users:
+
+        required_hours = 0
+
+        # Lunes a Viernes
+
+        if weekday <= 4:
+
+            required_hours = 8
+
+        # Sabado
+
+        elif weekday == 5:
+
+            saturday_user = df_special_days[
+                (
+                    df_special_days["Persona"]
+                    == user
+                )
+                &
+                (
+                    df_special_days[
+                        "Tipo de Novedad"
+                    ]
+                    == "Sábado"
+                )
+                &
+                (
+                    df_special_days["Fecha"]
+                    .dt.date
+                    == current_day.date()
+                )
+            ]
+
+            if len(saturday_user) > 0:
+
+                required_hours = 4
+
+        # Domingo
+
+        else:
+
+            required_hours = 0
+
+        # Festivos
+
+        holiday_user = df_special_days[
+            (
+                df_special_days["Persona"]
+                == user
+            )
+            &
+            (
+                df_special_days[
+                    "Tipo de Novedad"
+                ]
+                == "Festivo"
+            )
+            &
+            (
+                df_special_days["Fecha"]
+                .dt.date
+                == current_day.date()
+            )
+        ]
+
+        if len(holiday_user) > 0:
+
+            required_hours = 8
+
+        if required_hours == 0:
+
+            continue
+
+        day_record = daily_report[
+            (
+                daily_report["USER_CORRECT"]
+                == user
+            )
+            &
+            (
+                daily_report["Date1"]
+                .dt.date
+                == current_day.date()
+            )
+        ]
+
+        worked_hours = 0
+
+        if len(day_record) > 0:
+
+            worked_hours = (
+                day_record["Total_Hours"]
+                .sum()
+            )
+
+        novelty = get_novelty_status(
+            user,
+            current_day,
+            df_novelties
+        )
+
+        if novelty is not None:
+
+            status = f"🟡 {novelty}"
+
+        else:
+
+            if worked_hours == 0:
+
+                status = (
+                    "❌ No registró tiempo"
+                )
+
+            elif worked_hours < required_hours:
+
+                status = (
+                    "❌ Horas insuficientes"
+                )
+
+            else:
+
+                status = (
+                    "✅ Cumple"
+                )
+
+        compliance_records.append(
+            {
+                "Date": current_day.date(),
+                "User": user,
+                "Hours Worked": worked_hours,
+                "Hours Required": required_hours,
+                "Novelty": novelty,
+                "Status": status
+            }
+        )
+
+compliance_engine = pd.DataFrame(
+    compliance_records
+)
+
     return (
         daily_report,
         df_toggl,
-        users_summary
+        users_summary,
+        compliance_engine
     )
 
 # ==================================================
@@ -276,6 +504,11 @@ toggl_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
+novelties_file = st.sidebar.file_uploader(
+    "Novedades RRHH",
+    type=["xlsx"]
+)
+
 st.sidebar.divider()
 
 start_date = st.sidebar.date_input(
@@ -292,14 +525,22 @@ end_date = st.sidebar.date_input(
 # PROCESS
 # ==================================================
 
-if resources_file and toggl_file:
 
-    daily_report, detail_report, users_summary = process_files(
-        toggl_file,
-        resources_file,
-        start_date,
-        end_date
-    )
+if (
+    resources_file
+    and toggl_file
+    and novelties_file
+):
+
+
+daily_report, detail_report, users_summary, compliance_engine = process_files(
+    toggl_file,
+    resources_file,
+    novelties_file,
+    start_date,
+    end_date
+)
+
 
     total_users = users_summary["USER_CORRECT"].nunique()
 
@@ -344,11 +585,12 @@ if resources_file and toggl_file:
     # TABS
     # =====================================
 
-    tab1, tab2, tab3 = st.tabs(
+    tab1, tab2, tab3, tab4 = st.tabs(
         [
             "👥 Users Summary",
             "✅ Daily Compliance",
-            "📋 Activity Detail"
+            "📋 Activity Detail",
+            "🚨 Compliance Engine"
         ]
     )
 
@@ -448,6 +690,36 @@ if resources_file and toggl_file:
             ],
             use_container_width=True
         )
+
+with tab4:
+
+    st.subheader(
+        "Compliance Engine"
+    )
+
+    compliance_filter = st.selectbox(
+        "Compliance Status",
+        [
+            "All",
+            "✅ Cumple",
+            "❌ No registró tiempo",
+            "❌ Horas insuficientes"
+        ]
+    )
+
+    engine = compliance_engine.copy()
+
+    if compliance_filter != "All":
+
+        engine = engine[
+            engine["Status"]
+            == compliance_filter
+        ]
+
+    st.dataframe(
+        engine,
+        use_container_width=True
+    )
 
     # =====================================
     # NON COMPLIANCE
