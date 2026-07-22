@@ -707,14 +707,14 @@ if (
             use_container_width=True
         )
 
-with tab4:
+    with tab4:
 
-    st.subheader(
-        "Compliance Engine"
+        st.subheader(
+            "Compliance Engine"
     )
 
-    compliance_filter = st.selectbox(
-        "Compliance Status",
+        compliance_filter = st.selectbox(
+            "Compliance Status",
         [
             "All",
             "✅ Cumple",
