@@ -232,8 +232,16 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             else:
                 if worked_hours == 0:
                     status = "❌ No registró tiempo"
-                elif worked_hours < required_hours:
+                    
+            elif weekday == 5:
+            
+            if worked_hours < 3.5:
+                else:
+                    status = "✅ Cumple"
+                    
+            elif worked_hours < required_hours:
                     status = "❌ Horas insuficientes"
+        
                 else:
                     status = "✅ Cumple"
             
