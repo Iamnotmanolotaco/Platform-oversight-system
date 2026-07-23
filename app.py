@@ -390,7 +390,7 @@ if resources_file and toggl_file and novelties_file:
         )
 
         selected_user = st.selectbox(
-            "Filter by User",
+            "Search User",
             ["All Users"] + users_list
         )
 
