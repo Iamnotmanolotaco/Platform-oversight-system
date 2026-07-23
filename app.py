@@ -225,9 +225,12 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
                 (daily_report["Date1"].dt.date == current_day.date())
             ]
             
-            worked_hours = 0
+            # =========================================
+            # FIX: Asegurar que worked_hours sea float
+            # =========================================
+            worked_hours = 0.0
             if len(day_record) > 0:
-                worked_hours = day_record["Total_Hours"].sum()
+                worked_hours = float(day_record["Total_Hours"].sum())
             
             novelty = get_novelty_status(user, current_day, df_novelties)
             
