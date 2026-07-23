@@ -83,6 +83,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
     df_novelties["Fecha Inicio"] = pd.to_datetime(df_novelties["Fecha Inicio"], errors="coerce")
     df_novelties["Fecha Fin"] = pd.to_datetime(df_novelties["Fecha Fin"], errors="coerce")
     df_special_days["Fecha"] = pd.to_datetime(df_special_days["Fecha"], errors="coerce")
+    df_special_days["PERSONA_NORMALIZADA"] = df_special_days["Persona"].astype(str).apply(normalize_name)
 
     # =========================================
     # USER MAP
@@ -240,18 +241,19 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
         weekday = current_day.weekday()
 
         for user in active_users:
+            normalized_user = normalize_name(user)
             required_hours = 0
 
             # =========================================
             # FESTIVOS
             # =========================================
-            holiday_user = df_special_days[
-                (df_special_days["Persona"] == user) &
+            holiday_users = df_special_days[
+                (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
                 (df_special_days["Tipo de Novedad"] == "Festivo") &
                 (df_special_days["Fecha"].dt.date == current_day.date())
-            ]
+            ]["PERSONA_NORMALIZADA"].unique()
 
-            if len(holiday_user) > 0:
+            if len(holiday_users) > 0:
                 required_hours = 8
 
             # =========================================
@@ -265,7 +267,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
             # =========================================
             elif weekday == 5:
                 saturday_user = df_special_days[
-                    (df_special_days["Persona"] == user) &
+                    (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
                     (df_special_days["Tipo de Novedad"] == "Sábado") &
                     (df_special_days["Fecha"].dt.date == current_day.date())
                 ]
