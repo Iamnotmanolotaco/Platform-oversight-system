@@ -253,6 +253,7 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             
             compliance_records.append({
                 "Date": current_day.date(),
+                "Weekday": weekday,
                 "User": user,
                 "Hours Worked": round(worked_hours, 2),
                 "Hours Required": required_hours,
