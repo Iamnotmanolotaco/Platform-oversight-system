@@ -298,7 +298,7 @@ if resources_file and toggl_file and novelties_file:
     total_users = users_summary["USER_CORRECT"].nunique()
 
     # =========================================
-    # CORREGIDO: Cálculo de métricas
+    # CÁLCULO DE MÉTRICAS
     # =========================================
     compliant_days = len(
         compliance_engine[compliance_engine["Status"] == "✅ Cumple"]
@@ -363,9 +363,17 @@ if resources_file and toggl_file and novelties_file:
         if compliance_filter != "All":
             engine = engine[engine["Status"] == compliance_filter]
 
-        st.dataframe(engine, use_container_width=True)
-        
-        
+        st.dataframe(
+            engine[[
+                "Date",
+                "User",
+                "Hours Worked",
+                "Novelty",
+                "Status"
+            ]],
+            use_container_width=True
+        )
+
     # =====================================
     # TAB 2 - ACTIVITY DETAIL
     # =====================================
@@ -384,7 +392,7 @@ if resources_file and toggl_file and novelties_file:
         )
 
     # =====================================
-    # TAB 3 -  SUMMANRY
+    # TAB 3 - USERS SUMMARY
     # =====================================
 
     with tab3:
@@ -408,7 +416,6 @@ if resources_file and toggl_file and novelties_file:
             title="Top Users by Hours"
         )
         st.plotly_chart(fig_users, use_container_width=True)
-
 
     # =====================================
     # NON COMPLIANCE
