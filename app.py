@@ -68,13 +68,14 @@ def get_novelty_status(user, target_date, df_novelties):
 
 
 @st.cache_data
-def process_files(toggl_file, resources_file, novelties_file, start_date, end_date):
+def process_files(toggl_file, camplegal_file, resources_file, novelties_file, start_date, end_date):
 
     # =========================================
     # READ FILES
     # =========================================
 
     df_toggl = pd.read_excel(toggl_file, sheet_name="DataBaseToggl", engine="openpyxl")
+    df_camplegal = pd.read_excel(camplegal_file, sheet_name="Time entries", engine="openpyxl")
     df_names = pd.read_excel(resources_file, sheet_name="Names", engine="openpyxl")
     df_novelties = pd.read_excel(novelties_file, sheet_name="Novedades", engine="openpyxl")
     df_special_days = pd.read_excel(novelties_file, sheet_name="Novedades 2", engine="openpyxl")
@@ -96,11 +97,15 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
     df_toggl["NORMALIZED_MEMBER"] = df_toggl["Member"].astype(str).apply(normalize_name)
     df_toggl["USER_CORRECT"] = df_toggl["NORMALIZED_MEMBER"].map(user_map).fillna(df_toggl["Member"])
 
+    df_camplegal["NORMALIZED_MEMBER"] = df_camplegal["Staff Name"].astype(str).apply(normalize_name)
+    df_camplegal["USER_CORRECT"] = df_camplegal["NORMALIZED_MEMBER"].map(user_map).fillna(df_camplegal["Staff Name"])
+
     # =========================================
     # DATE
     # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(df_toggl["Date1"], errors="coerce")
+    df_camplegal["Date1"] = pd.to_datetime(df_camplegal["Date"], errors="coerce")
 
     # =========================================
     # FILTER DATES
@@ -111,18 +116,63 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
         (df_toggl["Date1"] <= pd.to_datetime(end_date))
     ]
 
+    df_camplegal = df_camplegal[
+        (df_camplegal["Date1"] >= pd.to_datetime(start_date)) &
+        (df_camplegal["Date1"] <= pd.to_datetime(end_date))
+    ]
+
     # =========================================
     # HOURS
     # =========================================
 
     df_toggl["Hours"] = df_toggl["Duration"].apply(convert_duration_to_hours)
+    df_camplegal["Hours"] = pd.to_numeric(df_camplegal["Hours Spent"], errors="coerce").fillna(0)
+
+    # =========================================
+    # STANDARDIZE COLUMNS
+    # =========================================
+
+    df_toggl["Activity"] = df_toggl["Project (Activity)"]
+    df_toggl["Source"] = "Toggl"
+
+    df_camplegal["Activity"] = df_camplegal["Activity"].astype(str)
+    df_camplegal["Source"] = "Camp Legal"
+
+    # =========================================
+    # SELECT COLUMNS
+    # =========================================
+
+    df_toggl_std = df_toggl[[
+        "Date1",
+        "USER_CORRECT",
+        "Hours",
+        "Activity",
+        "Source"
+    ]].copy()
+
+    df_camplegal_std = df_camplegal[[
+        "Date1",
+        "USER_CORRECT",
+        "Hours",
+        "Activity",
+        "Source"
+    ]].copy()
+
+    # =========================================
+    # CONCATENATE
+    # =========================================
+
+    df_all_time = pd.concat(
+        [df_toggl_std, df_camplegal_std],
+        ignore_index=True
+    )
 
     # =========================================
     # DAILY REPORT
     # =========================================
 
     daily_report = (
-        df_toggl
+        df_all_time
         .groupby(["Date1", "USER_CORRECT"], as_index=False)
         .agg(Total_Hours=("Hours", "sum"))
     )
@@ -151,7 +201,7 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
     # =========================================
 
     users_summary = (
-        df_toggl
+        df_all_time
         .groupby("USER_CORRECT")
         .agg(Total_Hours=("Hours", "sum"), Entries=("Hours", "count"))
         .reset_index()
@@ -167,6 +217,12 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
     )
 
     users_summary = users_summary.sort_values("Total_Hours", ascending=False)
+
+    # =========================================
+    # DETAIL REPORT
+    # =========================================
+
+    detail_report = df_all_time.copy()
 
     # =========================================
     # COMPLIANCE ENGINE
@@ -256,7 +312,7 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
 
     compliance_engine = pd.DataFrame(compliance_records)
 
-    return daily_report, df_toggl, users_summary, compliance_engine
+    return daily_report, detail_report, users_summary, compliance_engine
 
 
 # ==================================================
@@ -275,6 +331,7 @@ st.sidebar.header("Upload Files")
 resources_file = st.sidebar.file_uploader("Power BI Resources", type=["xlsx"])
 toggl_file = st.sidebar.file_uploader("Toggl File", type=["xlsx"])
 novelties_file = st.sidebar.file_uploader("Novedades RRHH", type=["xlsx"])
+camplegal_file = st.sidebar.file_uploader("Camp Legal", type=["xlsx"])
 
 st.sidebar.divider()
 
@@ -285,10 +342,11 @@ end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-07-31"))
 # PROCESS
 # ==================================================
 
-if resources_file and toggl_file and novelties_file:
+if resources_file and toggl_file and novelties_file and camplegal_file:
 
     daily_report, detail_report, users_summary, compliance_engine = process_files(
         toggl_file,
+        camplegal_file,
         resources_file,
         novelties_file,
         start_date,
@@ -404,9 +462,9 @@ if resources_file and toggl_file and novelties_file:
             detail_view[[
                 "Date1",
                 "USER_CORRECT",
-                "Project (Activity)",
-                "Duration",
-                "Hours"
+                "Activity",
+                "Hours",
+                "Source"
             ]],
             use_container_width=True
         )
