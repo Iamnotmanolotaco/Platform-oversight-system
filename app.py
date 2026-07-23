@@ -128,11 +128,7 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
     )
 
     daily_report["Total_Hours"] = daily_report["Total_Hours"].round(2)
-    daily_report["Status"] = np.where(
-        daily_report["Total_Hours"] >= MINIMUM_DAILY_HOURS,
-        "✅ Comply",
-        "❌ Does Not Comply"
-    )
+    daily_report["Status"] = "See Compliance Engine"
 
     # =========================================
     # EMPLOYEE INFO
