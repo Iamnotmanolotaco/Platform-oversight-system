@@ -247,39 +247,45 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
             # =========================================
             # FESTIVOS
             # =========================================
-            holiday_users = df_special_days[
-                (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
+            holiday_assignments = df_special_days[
                 (df_special_days["Tipo de Novedad"] == "Festivo") &
                 (df_special_days["Fecha"].dt.date == current_day.date())
-            ]["PERSONA_NORMALIZADA"].unique()
+            ]
+            is_holiday = len(holiday_assignments) > 0
 
-            if len(holiday_users) > 0:
-                required_hours = 8
+            if is_holiday:
+                holiday_users = holiday_assignments["PERSONA_NORMALIZADA"].unique()
+                if normalized_user in holiday_users:
+                    required_hours = 8
+                    # Si es festivo para este usuario, continuar al siguiente
+                    # (esto evita que se le apliquen otras reglas)
 
-            # =========================================
-            # LUNES A VIERNES
-            # =========================================
-            elif weekday <= 4:
-                required_hours = 8
+            # Si no es festivo, evaluar el día normal
+            if required_hours == 0:
+                # =========================================
+                # LUNES A VIERNES
+                # =========================================
+                if weekday <= 4:
+                    required_hours = 8
 
-            # =========================================
-            # SÁBADOS
-            # =========================================
-            elif weekday == 5:
-                saturday_user = df_special_days[
-                    (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
-                    (df_special_days["Tipo de Novedad"] == "Sábado") &
-                    (df_special_days["Fecha"].dt.date == current_day.date())
-                ]
+                # =========================================
+                # SÁBADOS
+                # =========================================
+                elif weekday == 5:
+                    saturday_user = df_special_days[
+                        (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
+                        (df_special_days["Tipo de Novedad"] == "Sábado") &
+                        (df_special_days["Fecha"].dt.date == current_day.date())
+                    ]
 
-                if len(saturday_user) > 0:
-                    required_hours = 4
+                    if len(saturday_user) > 0:
+                        required_hours = 4
 
-            # =========================================
-            # DOMINGOS
-            # =========================================
-            else:
-                required_hours = 0
+                # =========================================
+                # DOMINGOS
+                # =========================================
+                else:
+                    required_hours = 0
 
             if required_hours == 0:
                 continue
