@@ -300,19 +300,28 @@ if resources_file and toggl_file and novelties_file:
     non_compliant_days = (daily_report["Status"] == "❌ Does Not Comply").sum()
     total_hours = round(users_summary["Total_Hours"].sum(), 2)
 
-    c1, c2, c3, c4 = st.columns(4)
+    total_non_compliance = len(
+        compliance_engine[
+            compliance_engine["Status"].isin([
+                "❌ No registró tiempo",
+                "❌ Horas insuficientes"
+            ])
+        ]
+    )
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("👥 Users", total_users)
     c2.metric("✅ Compliant Days", compliant_days)
     c3.metric("❌ Non Compliant Days", non_compliant_days)
     c4.metric("⏱️ Total Hours", total_hours)
+    c5.metric("🚨 Non Compliance", total_non_compliance)
 
     # =====================================
     # TABS
     # =====================================
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "👥 Users Summary",
-        "✅ Daily Compliance",
         "📋 Activity Detail",
         "🚨 Compliance Engine"
     ])
@@ -344,36 +353,10 @@ if resources_file and toggl_file and novelties_file:
         st.plotly_chart(fig_users, use_container_width=True)
 
     # =====================================
-    # TAB 2 - DAILY COMPLIANCE
+    # TAB 2 - ACTIVITY DETAIL
     # =====================================
 
     with tab2:
-        status_filter = st.selectbox(
-            "Status Filter",
-            ["All", "✅ Comply", "❌ Does Not Comply"]
-        )
-
-        report = daily_report.copy()
-        if status_filter != "All":
-            report = report[report["Status"] == status_filter]
-
-        st.dataframe(
-            report[[
-                "Date1",
-                "USER_CORRECT",
-                "COMPANY",
-                "TEAM",
-                "Total_Hours",
-                "Status"
-            ]],
-            use_container_width=True
-        )
-
-    # =====================================
-    # TAB 3 - ACTIVITY DETAIL
-    # =====================================
-
-    with tab3:
         st.subheader("Activity Detail")
         st.dataframe(
             detail_report[[
@@ -387,10 +370,10 @@ if resources_file and toggl_file and novelties_file:
         )
 
     # =====================================
-    # TAB 4 - COMPLIANCE ENGINE
+    # TAB 3 - COMPLIANCE ENGINE
     # =====================================
 
-    with tab4:
+    with tab3:
         st.subheader("Compliance Engine")
 
         compliance_filter = st.selectbox(
