@@ -296,8 +296,29 @@ if resources_file and toggl_file and novelties_file:
     )
 
     total_users = users_summary["USER_CORRECT"].nunique()
-    compliant_days = (daily_report["Status"] == "✅ Comply").sum()
-    non_compliant_days = (daily_report["Status"] == "❌ Does Not Comply").sum()
+
+    # =========================================
+    # CORREGIDO: Cálculo de métricas
+    # =========================================
+    compliant_days = len(
+        compliance_engine[compliance_engine["Status"] == "✅ Cumple"]
+    )
+
+    non_compliant_days = len(
+        compliance_engine[
+            compliance_engine["Status"].isin([
+                "❌ No registró tiempo",
+                "❌ Horas insuficientes"
+            ])
+        ]
+    )
+
+    justified_days = len(
+        compliance_engine[
+            compliance_engine["Status"].astype(str).str.startswith("🟡")
+        ]
+    )
+
     total_hours = round(users_summary["Total_Hours"].sum(), 2)
 
     total_non_compliance = len(
@@ -313,8 +334,8 @@ if resources_file and toggl_file and novelties_file:
     c1.metric("👥 Users", total_users)
     c2.metric("✅ Compliant Days", compliant_days)
     c3.metric("❌ Non Compliant Days", non_compliant_days)
-    c4.metric("⏱️ Total Hours", total_hours)
-    c5.metric("🚨 Non Compliance", total_non_compliance)
+    c4.metric("🟡 Justified", justified_days)
+    c5.metric("⏱️ Total Hours", total_hours)
 
     # =====================================
     # TABS
