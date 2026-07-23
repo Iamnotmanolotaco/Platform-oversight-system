@@ -325,7 +325,9 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
                 "Hours Worked": round(worked_hours, 2),
                 "Hours Required": required_hours,
                 "Novelty": novelty,
-                "Status": status
+                "Status": status,
+                "Holiday Count": len(holiday_assignments),
+                "Current Day": current_day.date()
             })
 
     compliance_engine = pd.DataFrame(compliance_records)
