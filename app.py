@@ -172,6 +172,10 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
     
     users_summary = users_summary.sort_values("Total_Hours", ascending=False)
     
+    # =========================================
+    # COMPLIANCE ENGINE
+    # =========================================
+    
     active_users = df_names[
         df_names["USER STATUS"].astype(str).str.upper().eq("ACTIVE")
     ]["NAME CORRECT"].dropna().unique()
@@ -227,28 +231,27 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             
             novelty = get_novelty_status(user, current_day, df_novelties)
             
+            # =========================================
+            # FIX: CORREGIDA LA LÓGICA DE STATUS
+            # =========================================
             if novelty is not None:
                 status = f"🟡 {novelty}"
-            else:
-                if worked_hours == 0:
-                    status = "❌ No registró tiempo"
-                    
-            elif weekday == 5:
-            
-            if worked_hours < 3.5:
-                else:
-                    status = "✅ Cumple"
-                    
-            elif worked_hours < required_hours:
+            elif worked_hours == 0:
+                status = "❌ No registró tiempo"
+            elif weekday == 5:  # Sábado
+                if worked_hours < 3.5:
                     status = "❌ Horas insuficientes"
-        
                 else:
                     status = "✅ Cumple"
+            elif worked_hours < required_hours:
+                status = "❌ Horas insuficientes"
+            else:
+                status = "✅ Cumple"
             
             compliance_records.append({
                 "Date": current_day.date(),
                 "User": user,
-                "Hours Worked": worked_hours,
+                "Hours Worked": round(worked_hours, 2),
                 "Hours Required": required_hours,
                 "Novelty": novelty,
                 "Status": status
@@ -301,10 +304,10 @@ if resources_file and toggl_file and novelties_file:
     total_hours = round(users_summary["Total_Hours"].sum(), 2)
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Users", total_users)
-    c2.metric("Compliant Days", compliant_days)
-    c3.metric("Non Compliant Days", non_compliant_days)
-    c4.metric("Total Hours", total_hours)
+    c1.metric("👥 Users", total_users)
+    c2.metric("✅ Compliant Days", compliant_days)
+    c3.metric("❌ Non Compliant Days", non_compliant_days)
+    c4.metric("⏱️ Total Hours", total_hours)
     
     # =====================================
     # TABS
@@ -413,16 +416,19 @@ if resources_file and toggl_file and novelties_file:
     
     non_compliance = daily_report[daily_report["Status"] == "❌ Does Not Comply"]
     
-    st.dataframe(
-        non_compliance[[
-            "Date1",
-            "USER_CORRECT",
-            "COMPANY",
-            "TEAM",
-            "Total_Hours"
-        ]],
-        use_container_width=True
-    )
+    if len(non_compliance) > 0:
+        st.dataframe(
+            non_compliance[[
+                "Date1",
+                "USER_CORRECT",
+                "COMPANY",
+                "TEAM",
+                "Total_Hours"
+            ]],
+            use_container_width=True
+        )
+    else:
+        st.success("🎉 No non-compliant records found!")
 
 else:
-    st.info("Upload both files to begin.")
+    st.info("📌 Upload all three files to begin.")
