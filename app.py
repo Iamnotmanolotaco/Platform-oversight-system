@@ -232,17 +232,17 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             novelty = get_novelty_status(user, current_day, df_novelties)
             
             # =========================================
-            # FIX: CORREGIDA LA LÓGICA DE STATUS
+            # LÓGICA DE STATUS CORREGIDA (SÁBADO)
             # =========================================
             if novelty is not None:
                 status = f"🟡 {novelty}"
             elif worked_hours == 0:
                 status = "❌ No registró tiempo"
-            elif weekday == 5:  # Sábado
-                if worked_hours < 3.5:
-                    status = "❌ Horas insuficientes"
-                else:
+            elif weekday == 5:  # SÁBADO
+                if worked_hours >= 3.5:
                     status = "✅ Cumple"
+                else:
+                    status = "❌ Horas insuficientes"
             elif worked_hours < required_hours:
                 status = "❌ Horas insuficientes"
             else:
