@@ -242,32 +242,42 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
         for user in active_users:
             required_hours = 0
 
-            # Lunes a Viernes
-            if weekday <= 4:
+            # =========================================
+            # FESTIVOS
+            # =========================================
+            holiday_user = df_special_days[
+                (df_special_days["Persona"] == user) &
+                (df_special_days["Tipo de Novedad"] == "Festivo") &
+                (df_special_days["Fecha"].dt.date == current_day.date())
+            ]
+
+            if len(holiday_user) > 0:
                 required_hours = 8
 
-            # Sábado
+            # =========================================
+            # LUNES A VIERNES
+            # =========================================
+            elif weekday <= 4:
+                required_hours = 8
+
+            # =========================================
+            # SÁBADOS
+            # =========================================
             elif weekday == 5:
                 saturday_user = df_special_days[
                     (df_special_days["Persona"] == user) &
                     (df_special_days["Tipo de Novedad"] == "Sábado") &
                     (df_special_days["Fecha"].dt.date == current_day.date())
                 ]
+
                 if len(saturday_user) > 0:
                     required_hours = 4
 
-            # Domingo
+            # =========================================
+            # DOMINGOS
+            # =========================================
             else:
                 required_hours = 0
-
-            # Festivos
-            holiday_user = df_special_days[
-                (df_special_days["Persona"] == user) &
-                (df_special_days["Tipo de Novedad"] == "Festivo") &
-                (df_special_days["Fecha"].dt.date == current_day.date())
-            ]
-            if len(holiday_user) > 0:
-                required_hours = 8
 
             if required_hours == 0:
                 continue
