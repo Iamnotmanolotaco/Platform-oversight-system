@@ -430,7 +430,6 @@ if resources_file and toggl_file and novelties_file:
                 "Date",
                 "User",
                 "Hours Worked",
-                "Hours Required",
                 "Status"
             ]],
             use_container_width=True
