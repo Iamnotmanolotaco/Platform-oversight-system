@@ -342,16 +342,52 @@ if resources_file and toggl_file and novelties_file:
     # =====================================
 
     tab1, tab2, tab3 = st.tabs([
-        "👥 Users Summary",
+        "🚨 Compliance Engine",
         "📋 Activity Detail",
-        "🚨 Compliance Engine"
+        "👥 Users Summary"
     ])
 
     # =====================================
-    # TAB 1 - USERS SUMMARY
+    # TAB 1 - COMPLIANCE ENGINE
     # =====================================
 
     with tab1:
+        st.subheader("Compliance Engine")
+
+        compliance_filter = st.selectbox(
+            "Compliance Status",
+            ["All", "✅ Cumple", "❌ No registró tiempo", "❌ Horas insuficientes"]
+        )
+
+        engine = compliance_engine.copy()
+        if compliance_filter != "All":
+            engine = engine[engine["Status"] == compliance_filter]
+
+        st.dataframe(engine, use_container_width=True)
+        
+        
+    # =====================================
+    # TAB 2 - ACTIVITY DETAIL
+    # =====================================
+
+    with tab2:
+        st.subheader("Activity Detail")
+        st.dataframe(
+            detail_report[[
+                "Date1",
+                "USER_CORRECT",
+                "Project (Activity)",
+                "Duration",
+                "Hours"
+            ]],
+            use_container_width=True
+        )
+
+    # =====================================
+    # TAB 3 -  SUMMANRY
+    # =====================================
+
+    with tab3:
         st.subheader("Total Hours by User")
         st.dataframe(
             users_summary[[
@@ -373,40 +409,6 @@ if resources_file and toggl_file and novelties_file:
         )
         st.plotly_chart(fig_users, use_container_width=True)
 
-    # =====================================
-    # TAB 2 - ACTIVITY DETAIL
-    # =====================================
-
-    with tab2:
-        st.subheader("Activity Detail")
-        st.dataframe(
-            detail_report[[
-                "Date1",
-                "USER_CORRECT",
-                "Project (Activity)",
-                "Duration",
-                "Hours"
-            ]],
-            use_container_width=True
-        )
-
-    # =====================================
-    # TAB 3 - COMPLIANCE ENGINE
-    # =====================================
-
-    with tab3:
-        st.subheader("Compliance Engine")
-
-        compliance_filter = st.selectbox(
-            "Compliance Status",
-            ["All", "✅ Cumple", "❌ No registró tiempo", "❌ Horas insuficientes"]
-        )
-
-        engine = compliance_engine.copy()
-        if compliance_filter != "All":
-            engine = engine[engine["Status"] == compliance_filter]
-
-        st.dataframe(engine, use_container_width=True)
 
     # =====================================
     # NON COMPLIANCE
