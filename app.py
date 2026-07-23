@@ -380,8 +380,28 @@ if resources_file and toggl_file and novelties_file:
 
     with tab2:
         st.subheader("Activity Detail")
+
+        # Filtro por usuario
+        users_list = sorted(
+            detail_report["USER_CORRECT"]
+            .dropna()
+            .unique()
+            .tolist()
+        )
+
+        selected_user = st.selectbox(
+            "Filter by User",
+            ["All Users"] + users_list
+        )
+
+        detail_view = detail_report.copy()
+        if selected_user != "All Users":
+            detail_view = detail_view[
+                detail_view["USER_CORRECT"] == selected_user
+            ]
+
         st.dataframe(
-            detail_report[[
+            detail_view[[
                 "Date1",
                 "USER_CORRECT",
                 "Project (Activity)",
