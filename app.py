@@ -239,15 +239,19 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             # =========================================
             if novelty is not None:
                 status = f"🟡 {novelty}"
+
             elif worked_hours == 0:
                 status = "❌ No registró tiempo"
-            elif weekday == 5:  # SÁBADO
-                if worked_hours >= 3.5:
-                    status = "✅ Cumple"
-                else:
-                    status = "❌ Horas insuficientes"
+# Regla especial para jornadas con expectativa de 4 horas
+            elif required_hours == 4:
+            if worked_hours >= 3.5:
+                status = "✅ Cumple"
+            else:
+                status = "❌ Horas insuficientes"
+# Jornadas que requieren 8 horas
             elif worked_hours < required_hours:
                 status = "❌ Horas insuficientes"
+
             else:
                 status = "✅ Cumple"
             
