@@ -232,21 +232,15 @@ def process_files(toggl_file, resources_file, novelties_file, start_date, end_da
             # =========================================
             if novelty is not None:
                 status = f"🟡 {novelty}"
-
             elif worked_hours == 0:
                 status = "❌ No registró tiempo"
-
-            # Regla especial para jornadas con expectativa de 4 horas (Sábado)
             elif required_hours == 4:
                 if worked_hours >= 3.5:
                     status = "✅ Cumple"
                 else:
                     status = "❌ Horas insuficientes"
-
-            # Jornadas que requieren 8 horas
             elif worked_hours < required_hours:
                 status = "❌ Horas insuficientes"
-
             else:
                 status = "✅ Cumple"
 
@@ -417,16 +411,21 @@ if resources_file and toggl_file and novelties_file:
     st.divider()
     st.subheader("🚨 Non Compliant Records")
 
-    non_compliance = daily_report[daily_report["Status"] == "❌ Does Not Comply"]
+    non_compliance = compliance_engine[
+        compliance_engine["Status"].isin([
+            "❌ No registró tiempo",
+            "❌ Horas insuficientes"
+        ])
+    ]
 
     if len(non_compliance) > 0:
         st.dataframe(
             non_compliance[[
-                "Date1",
-                "USER_CORRECT",
-                "COMPANY",
-                "TEAM",
-                "Total_Hours"
+                "Date",
+                "User",
+                "Hours Worked",
+                "Hours Required",
+                "Status"
             ]],
             use_container_width=True
         )
