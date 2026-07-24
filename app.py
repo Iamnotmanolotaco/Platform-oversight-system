@@ -240,12 +240,24 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
 
     for current_day in all_dates:
         weekday = current_day.weekday()
-        users_to_evaluate = active_users
 
         for user in active_users:
             normalized_user = normalize_name(user)
             required_hours = 0
-            is_holiday = False
+            holiday_assignments = pd.DataFrame()  # Inicializar variable
+
+            # =========================================
+            # VERIFICAR SI EL USUARIO ESTÁ EN FESTIVO (NO TRABAJA)
+            # =========================================
+            holiday_user = df_special_days[
+                (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
+                (df_special_days["TIPO_NORMALIZADO"] == "FESTIVO") &
+                (df_special_days["Fecha"].dt.date == current_day.date())
+            ]
+
+            if len(holiday_user) > 0:
+                # Usuario en festivo - no requiere horas
+                continue
 
             # =========================================
             # VERIFICAR DÍA FESTIVO (PARA TODOS)
@@ -255,12 +267,11 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
                 (df_special_days["TIPO_NORMALIZADO"] == "FESTIVO") &
                 (df_special_days["Fecha"].dt.date == current_day.date())
             ]
+
             is_holiday = len(holiday_assignments) > 0
 
-            # =========================================
-            # DÍA FESTIVO - VERIFICAR SI EL USUARIO TRABAJA
-            # =========================================
             if is_holiday:
+                # Verificar si el usuario trabaja en festivo
                 holiday_worker = df_special_days[
                     (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
                     (df_special_days["TIPO_NORMALIZADO"] == "FESTIVO_PROGRAMADO") &
