@@ -84,6 +84,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
     df_novelties["Fecha Fin"] = pd.to_datetime(df_novelties["Fecha Fin"], errors="coerce")
     df_special_days["Fecha"] = pd.to_datetime(df_special_days["Fecha"], errors="coerce")
     df_special_days["PERSONA_NORMALIZADA"] = df_special_days["Persona"].astype(str).apply(normalize_name)
+    df_special_days["TIPO_NORMALIZADO"] = df_special_days["Tipo de Novedad"].astype(str).str.upper().str.strip()
 
     # =========================================
     # USER MAP
@@ -239,29 +240,37 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
 
     for current_day in all_dates:
         weekday = current_day.weekday()
+        users_to_evaluate = active_users
 
         for user in active_users:
             normalized_user = normalize_name(user)
             required_hours = 0
+            is_holiday = False
 
             # =========================================
-            # FESTIVOS
+            # VERIFICAR DÍA FESTIVO (PARA TODOS)
             # =========================================
             holiday_assignments = df_special_days[
-                (df_special_days["Tipo de Novedad"] == "Festivo") &
+                (df_special_days["PERSONA_NORMALIZADA"] == "TODOS") &
+                (df_special_days["TIPO_NORMALIZADO"] == "FESTIVO") &
                 (df_special_days["Fecha"].dt.date == current_day.date())
             ]
             is_holiday = len(holiday_assignments) > 0
 
+            # =========================================
+            # DÍA FESTIVO - VERIFICAR SI EL USUARIO TRABAJA
+            # =========================================
             if is_holiday:
-                holiday_users = holiday_assignments["PERSONA_NORMALIZADA"].unique()
-                if normalized_user in holiday_users:
+                holiday_worker = df_special_days[
+                    (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
+                    (df_special_days["TIPO_NORMALIZADO"] == "FESTIVO_PROGRAMADO") &
+                    (df_special_days["Fecha"].dt.date == current_day.date())
+                ]
+                if len(holiday_worker) > 0:
                     required_hours = 8
-                    # Si es festivo para este usuario, continuar al siguiente
-                    # (esto evita que se le apliquen otras reglas)
-
-            # Si no es festivo, evaluar el día normal
-            if required_hours == 0:
+                else:
+                    required_hours = 0
+            else:
                 # =========================================
                 # LUNES A VIERNES
                 # =========================================
@@ -274,12 +283,13 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
                 elif weekday == 5:
                     saturday_user = df_special_days[
                         (df_special_days["PERSONA_NORMALIZADA"] == normalized_user) &
-                        (df_special_days["Tipo de Novedad"] == "Sábado") &
+                        (df_special_days["TIPO_NORMALIZADO"] == "SABADO") &
                         (df_special_days["Fecha"].dt.date == current_day.date())
                     ]
-
                     if len(saturday_user) > 0:
                         required_hours = 4
+                    else:
+                        required_hours = 0
 
                 # =========================================
                 # DOMINGOS
@@ -287,9 +297,15 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
                 else:
                     required_hours = 0
 
+            # =========================================
+            # SI NO HAY HORAS REQUERIDAS, SALTAR
+            # =========================================
             if required_hours == 0:
                 continue
 
+            # =========================================
+            # OBTENER HORAS TRABAJADAS
+            # =========================================
             day_record = daily_report[
                 (daily_report["USER_CORRECT"] == user) &
                 (daily_report["Date1"].dt.date == current_day.date())
@@ -302,7 +318,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
             novelty = get_novelty_status(user, current_day, df_novelties)
 
             # =========================================
-            # LÓGICA DE STATUS (SÁBADO 4 HORAS)
+            # LÓGICA DE STATUS
             # =========================================
             if novelty is not None:
                 status = f"🟡 {novelty}"
