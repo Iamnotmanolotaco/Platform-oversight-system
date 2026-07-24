@@ -68,7 +68,7 @@ def get_novelty_status(user, target_date, df_novelties):
 
 
 @st.cache_data
-def process_files(toggl_file, camplegal_file, resources_file, novelties_file, start_date, end_date):
+def process_files(toggl_file, camplegal_file, smokeball_file, resources_file, novelties_file, start_date, end_date):
 
     # =========================================
     # READ FILES
@@ -76,6 +76,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
 
     df_toggl = pd.read_excel(toggl_file, sheet_name="DataBaseToggl", engine="openpyxl")
     df_camplegal = pd.read_excel(camplegal_file, sheet_name="Time entries", engine="openpyxl")
+    df_smokeball = pd.read_excel(smokeball_file, sheet_name="Entries", engine="openpyxl")
     df_names = pd.read_excel(resources_file, sheet_name="Names", engine="openpyxl")
     df_novelties = pd.read_excel(novelties_file, sheet_name="Novedades", engine="openpyxl")
     df_special_days = pd.read_excel(novelties_file, sheet_name="Novedades 2", engine="openpyxl")
@@ -102,25 +103,38 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
     df_camplegal["NORMALIZED_MEMBER"] = df_camplegal["Staff Name"].astype(str).apply(normalize_name)
     df_camplegal["USER_CORRECT"] = df_camplegal["NORMALIZED_MEMBER"].map(user_map).fillna(df_camplegal["Staff Name"])
 
+    # CORREGIDO: Smokeball
+    df_smokeball["NORMALIZED_MEMBER"] = df_smokeball["Name"].astype(str).apply(normalize_name)
+    df_smokeball["USER_CORRECT"] = df_smokeball["NORMALIZED_MEMBER"].map(user_map).fillna(df_smokeball["Name"])
+
     # =========================================
     # DATE
     # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(df_toggl["Date1"], errors="coerce")
     df_camplegal["Date1"] = pd.to_datetime(df_camplegal["Date"], errors="coerce")
+    df_smokeball["Date1"] = pd.to_datetime(df_smokeball["Date"], errors="coerce")
 
     # =========================================
     # FILTER DATES
     # =========================================
 
+    start_dt = pd.to_datetime(start_date)
+    end_dt = pd.to_datetime(end_date)
+
     df_toggl = df_toggl[
-        (df_toggl["Date1"] >= pd.to_datetime(start_date)) &
-        (df_toggl["Date1"] <= pd.to_datetime(end_date))
+        (df_toggl["Date1"] >= start_dt) &
+        (df_toggl["Date1"] <= end_dt)
     ]
 
     df_camplegal = df_camplegal[
-        (df_camplegal["Date1"] >= pd.to_datetime(start_date)) &
-        (df_camplegal["Date1"] <= pd.to_datetime(end_date))
+        (df_camplegal["Date1"] >= start_dt) &
+        (df_camplegal["Date1"] <= end_dt)
+    ]
+
+    df_smokeball = df_smokeball[
+        (df_smokeball["Date1"] >= start_dt) &
+        (df_smokeball["Date1"] <= end_dt)
     ]
 
     # =========================================
@@ -129,6 +143,7 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
 
     df_toggl["Hours"] = df_toggl["Duration"].apply(convert_duration_to_hours)
     df_camplegal["Hours"] = pd.to_numeric(df_camplegal["Hours Spent"], errors="coerce").fillna(0)
+    df_smokeball["Hours"] = pd.to_numeric(df_smokeball["Hours"], errors="coerce").fillna(0)
 
     # =========================================
     # STANDARDIZE COLUMNS
@@ -139,6 +154,10 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
 
     df_camplegal["Activity"] = df_camplegal["Activity"].astype(str)
     df_camplegal["Source"] = "Camp Legal"
+
+    # CORREGIDO: Smokeball
+    df_smokeball["Activity"] = df_smokeball["Subject"].astype(str)
+    df_smokeball["Source"] = "Smokeball"
 
     # =========================================
     # SELECT COLUMNS
@@ -160,12 +179,20 @@ def process_files(toggl_file, camplegal_file, resources_file, novelties_file, st
         "Source"
     ]].copy()
 
+    df_smokeball_std = df_smokeball[[
+        "Date1",
+        "USER_CORRECT",
+        "Hours",
+        "Activity",
+        "Source"
+    ]].copy()
+
     # =========================================
     # CONCATENATE
     # =========================================
 
     df_all_time = pd.concat(
-        [df_toggl_std, df_camplegal_std],
+        [df_toggl_std, df_camplegal_std, df_smokeball_std],
         ignore_index=True
     )
 
@@ -379,6 +406,7 @@ resources_file = st.sidebar.file_uploader("Power BI Resources", type=["xlsx"])
 toggl_file = st.sidebar.file_uploader("Toggl File", type=["xlsx"])
 novelties_file = st.sidebar.file_uploader("Novedades RRHH", type=["xlsx"])
 camplegal_file = st.sidebar.file_uploader("Camp Legal", type=["xlsx"])
+smokeball_file = st.sidebar.file_uploader("Smokeball", type=["xlsx"])
 
 st.sidebar.divider()
 
@@ -389,11 +417,12 @@ end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-07-31"))
 # PROCESS
 # ==================================================
 
-if resources_file and toggl_file and novelties_file and camplegal_file:
+if resources_file and toggl_file and novelties_file and camplegal_file and smokeball_file:
 
     daily_report, detail_report, users_summary, compliance_engine = process_files(
         toggl_file,
         camplegal_file,
+        smokeball_file,
         resources_file,
         novelties_file,
         start_date,
@@ -570,4 +599,4 @@ if resources_file and toggl_file and novelties_file and camplegal_file:
         st.success("🎉 No non-compliant records found!")
 
 else:
-    st.info("📌 Upload all three files to begin.")
+    st.info("📌 Upload all files to begin.")
