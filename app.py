@@ -231,6 +231,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         how="left"
     )
 
+    daily_report = daily_report.drop_duplicates()
     # =========================================
     # USER SUMMARY
     # =========================================
