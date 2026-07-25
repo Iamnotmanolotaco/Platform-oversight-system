@@ -32,14 +32,19 @@ def normalize_name(text):
 
 def build_user_mapping(df_names):
     mappings = []
+    source_columns = ["NAME TG", "NAME CL", "NAME SB"]
+    
     for _, row in df_names.iterrows():
         correct_name = row.get("NAME CORRECT")
-        tg_name = row.get("NAME TG")
-        if pd.notna(correct_name) and pd.notna(tg_name):
-            mappings.append({
-                "SOURCE_NAME": normalize_name(tg_name),
-                "NAME_CORRECT": correct_name
-            })
+        if pd.isna(correct_name):
+            continue
+        for col in source_columns:
+            source_name = row.get(col)
+            if pd.notna(source_name):
+                mappings.append({
+                    "SOURCE_NAME": normalize_name(source_name),
+                    "NAME_CORRECT": correct_name
+                })
 
     if len(mappings) == 0:
         return {}
