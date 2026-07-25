@@ -221,7 +221,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
 
     employee_info = (
         df_names[["NAME CORRECT", "COMPANY", "DEPARTMENT", "TEAM"]]
-        .drop_duplicates()
+        .drop_duplicates(subset=["NAME CORRECT"])
     )
 
     daily_report = daily_report.merge(
@@ -230,8 +230,6 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         right_on="NAME CORRECT",
         how="left"
     )
-
-    daily_report = daily_report.drop_duplicates()
     # =========================================
     # USER SUMMARY
     # =========================================
