@@ -230,6 +230,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         right_on="NAME CORRECT",
         how="left"
     )
+
     # =========================================
     # USER SUMMARY
     # =========================================
@@ -515,7 +516,7 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
     ])
 
     # =====================================
-    # TAB 1 - COMPLIANCE ENGINE
+    # TAB 1 - COMPLIANCE ENGINE (CORREGIDO)
     # =====================================
 
     with tab1:
@@ -525,10 +526,20 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
             "Compliance Status",
             ["All", "✅ Cumple", "❌ No registró tiempo", "❌ Horas insuficientes"]
         )
+        
+        compliance_users = sorted(compliance_engine["User"].dropna().unique().tolist())
+        selected_compliance_user = st.selectbox(
+            "Search User",
+            ["All Users"] + compliance_users
+        )
 
         engine = compliance_engine.copy()
+
         if compliance_filter != "All":
             engine = engine[engine["Status"] == compliance_filter]
+        
+        if selected_compliance_user != "All Users":
+            engine = engine[engine["User"] == selected_compliance_user]
 
         st.dataframe(
             engine[["Date", "User", "Hours Worked", "Novelty", "Status"]],
