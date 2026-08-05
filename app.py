@@ -33,7 +33,7 @@ def normalize_name(text):
 def build_user_mapping(df_names):
     mappings = []
     source_columns = ["NAME TG", "NAME CL", "NAME SB"]
-    
+
     for _, row in df_names.iterrows():
         correct_name = row.get("NAME CORRECT")
         if pd.isna(correct_name):
@@ -73,7 +73,7 @@ def get_novelty_status(user, target_date, df_novelties):
 
 
 @st.cache_data
-def process_files(toggl_file, camplegal_file, smokeball_file, resources_file, 
+def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
                   novelties_file, clg_novelties_file, start_date, end_date):
 
     # =========================================
@@ -418,7 +418,70 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
 
     compliance_engine = pd.DataFrame(compliance_records)
 
-    return daily_report, detail_report, users_summary, compliance_engine
+    compliance_summary = (
+        compliance_engine
+        .groupby("User")
+        .agg(
+            Total_Hours=("Hours Worked", "sum"),
+            Days_Evaluated=("Date", "count")
+        )
+        .reset_index()
+    )
+
+    success_counts = (
+        compliance_engine[compliance_engine["Status"] == "✅ Cumple"]
+        .groupby("User")
+        .size()
+    )
+
+    failure_counts = (
+        compliance_engine[
+            compliance_engine["Status"].isin([
+                "❌ No registró tiempo",
+                "❌ Horas insuficientes"
+            ])
+        ]
+        .groupby("User")
+        .size()
+    )
+
+    novelty_counts = (
+        compliance_engine[
+            compliance_engine["Status"].astype(str).str.startswith("🟡")
+        ]
+        .groupby("User")
+        .size()
+    )
+
+    compliance_summary["Compliant_Days"] = (
+        compliance_summary["User"].map(success_counts).fillna(0)
+    )
+
+    compliance_summary["Non_Compliant_Days"] = (
+        compliance_summary["User"].map(failure_counts).fillna(0)
+    )
+
+    compliance_summary["Justified_Days"] = (
+        compliance_summary["User"].map(novelty_counts).fillna(0)
+    )
+
+    daily_status = (
+        compliance_engine
+        .sort_values("Date")
+        .groupby("User")
+        .apply(
+            lambda df: " | ".join([
+                f"{d.strftime('%m/%d')} {s}"
+                for d, s in zip(df["Date"], df["Status"])
+            ])
+        )
+    )
+
+    compliance_summary["Daily_Status"] = (
+        compliance_summary["User"].map(daily_status).fillna("")
+    )
+
+    return daily_report, detail_report, users_summary, compliance_engine, compliance_summary
 
 
 # ==================================================
@@ -450,9 +513,16 @@ end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-07-31"))
 # PROCESS
 # ==================================================
 
-if resources_file and toggl_file and novelties_file and camplegal_file and smokeball_file and clg_novelties_file:
+if (
+    resources_file and
+    toggl_file and
+    novelties_file and
+    camplegal_file and
+    smokeball_file and
+    clg_novelties_file
+):
 
-    daily_report, detail_report, users_summary, compliance_engine = process_files(
+    daily_report, detail_report, users_summary, compliance_engine, compliance_summary = process_files(
         toggl_file,
         camplegal_file,
         smokeball_file,
@@ -509,14 +579,15 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
     # TABS
     # =====================================
 
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "🚨 Compliance Engine",
         "📋 Activity Detail",
-        "👥 Users Summary"
+        "👥 Users Summary",
+        "📊 Compliance Summary"
     ])
 
     # =====================================
-    # TAB 1 - COMPLIANCE ENGINE (CORREGIDO)
+    # TAB 1 - COMPLIANCE ENGINE
     # =====================================
 
     with tab1:
@@ -526,7 +597,7 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
             "Compliance Status",
             ["All", "✅ Cumple", "❌ No registró tiempo", "❌ Horas insuficientes"]
         )
-        
+
         compliance_users = sorted(compliance_engine["User"].dropna().unique().tolist())
         selected_compliance_user = st.selectbox(
             "Search User",
@@ -537,7 +608,7 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
 
         if compliance_filter != "All":
             engine = engine[engine["Status"] == compliance_filter]
-        
+
         if selected_compliance_user != "All Users":
             engine = engine[engine["User"] == selected_compliance_user]
 
@@ -583,7 +654,14 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
     with tab3:
         st.subheader("Total Hours by User")
         st.dataframe(
-            users_summary[["USER_CORRECT", "COMPANY", "DEPARTMENT", "TEAM", "Entries", "Total_Hours"]],
+            users_summary[[
+                "USER_CORRECT",
+                "COMPANY",
+                "DEPARTMENT",
+                "TEAM",
+                "Entries",
+                "Total_Hours"
+            ]],
             use_container_width=True
         )
 
@@ -594,6 +672,25 @@ if resources_file and toggl_file and novelties_file and camplegal_file and smoke
             title="Top Users by Hours"
         )
         st.plotly_chart(fig_users, use_container_width=True)
+
+    # =====================================
+    # TAB 4 - COMPLIANCE SUMMARY
+    # =====================================
+
+    with tab4:
+        st.subheader("Compliance Summary by User")
+        st.dataframe(
+            compliance_summary[[
+                "User",
+                "Total_Hours",
+                "Days_Evaluated",
+                "Compliant_Days",
+                "Non_Compliant_Days",
+                "Justified_Days",
+                "Daily_Status"
+            ]],
+            use_container_width=True
+        )
 
     # =====================================
     # NON COMPLIANCE
