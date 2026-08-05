@@ -706,29 +706,54 @@ if (
         if selected_summary_user != "All Users":
             summary_view = summary_view[summary_view["User"] == selected_summary_user]
 
-        for _, row in summary_view.iterrows():
-            non_compliant = int(row["Non_Compliant_Days"])
-            border_color = "#e74c3c" if non_compliant > 0 else "#27ae60"
-            icon = "❌" if non_compliant > 0 else "✅"
+        cols_per_row = 3
 
-            st.markdown(f"""
-            <div style="
-                border-left: 8px solid {border_color};
-                background-color: white;
-                padding: 20px;
-                margin-bottom: 15px;
-                border-radius: 12px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            ">
-                <h3>{icon} {row['User']}</h3>
-                <p><b>⏱️ Total Hours:</b> {row['Total_Hours']}</p>
-                <p><b>📅 Days Evaluated:</b> {row['Days_Evaluated']}</p>
-                <p><b>✅ Compliant Days:</b> {row['Compliant_Days']}</p>
-                <p><b>❌ Non-Compliant Days:</b> {row['Non_Compliant_Days']}</p>
-                <p><b>🟡 Justified Days:</b> {row['Justified_Days']}</p>
-                <p><b>🚨 Failed Dates:</b> {row['Failed_Dates']}</p>
-            </div>
-            """, unsafe_allow_html=True)
+        for i in range(0, len(summary_view), cols_per_row):
+            cols = st.columns(cols_per_row)
+
+            for j in range(cols_per_row):
+                if i + j >= len(summary_view):
+                    continue
+
+                row = summary_view.iloc[i + j]
+                non_compliant = int(row["Non_Compliant_Days"])
+                border_color = "#e74c3c" if non_compliant > 0 else "#27ae60"
+                icon = "❌" if non_compliant > 0 else "✅"
+
+                with cols[j]:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            border-left: 6px solid {border_color};
+                            padding:12px;
+                            border-radius:10px;
+                            background:white;
+                            min-height:220px;
+                            box-shadow:0 1px 6px rgba(0,0,0,0.08);
+                            margin-bottom:10px;
+                        ">
+                            <h4 style="margin-top:0;">
+                                {icon} {row['User']}
+                            </h4>
+                            <p style="margin:4px 0;">
+                                ⏱️ <b>{row['Total_Hours']:.2f}</b> hrs
+                            </p>
+                            <p style="margin:4px 0;">
+                                📅 {int(row['Days_Evaluated'])} días
+                            </p>
+                            <p style="margin:4px 0;">
+                                ✅ {int(row['Compliant_Days'])}
+                            </p>
+                            <p style="margin:4px 0;">
+                                ❌ {int(row['Non_Compliant_Days'])}
+                            </p>
+                            <p style="margin:4px 0;">
+                                🟡 {int(row['Justified_Days'])}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
     # =====================================
     # NON COMPLIANCE
