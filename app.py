@@ -706,7 +706,7 @@ if (
         if selected_summary_user != "All Users":
             summary_view = summary_view[summary_view["User"] == selected_summary_user]
 
-        cols_per_row = 3
+        cols_per_row = 4
 
         for i in range(0, len(summary_view), cols_per_row):
             cols = st.columns(cols_per_row)
