@@ -481,6 +481,22 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         compliance_summary["User"].map(daily_status).fillna("")
     )
 
+    # Calcular Failed_Dates para cada usuario
+    failed_dates = (
+        compliance_engine[
+            compliance_engine["Status"].isin([
+                "❌ No registró tiempo",
+                "❌ Horas insuficientes"
+            ])
+        ]
+        .groupby("User")["Date"]
+        .apply(lambda dates: ", ".join(d.strftime("%m/%d") for d in dates))
+    )
+
+    compliance_summary["Failed_Dates"] = (
+        compliance_summary["User"].map(failed_dates).fillna("Ninguna")
+    )
+
     return daily_report, detail_report, users_summary, compliance_engine, compliance_summary
 
 
@@ -678,19 +694,41 @@ if (
     # =====================================
 
     with tab4:
-        st.subheader("Compliance Summary by User")
-        st.dataframe(
-            compliance_summary[[
-                "User",
-                "Total_Hours",
-                "Days_Evaluated",
-                "Compliant_Days",
-                "Non_Compliant_Days",
-                "Justified_Days",
-                "Daily_Status"
-            ]],
-            use_container_width=True
+        st.subheader("Compliance Summary By User")
+        summary_view = compliance_summary.copy()
+
+        summary_users = sorted(summary_view["User"].dropna().unique().tolist())
+        selected_summary_user = st.selectbox(
+            "Search User (Summary)",
+            ["All Users"] + summary_users
         )
+
+        if selected_summary_user != "All Users":
+            summary_view = summary_view[summary_view["User"] == selected_summary_user]
+
+        for _, row in summary_view.iterrows():
+            non_compliant = int(row["Non_Compliant_Days"])
+            border_color = "#e74c3c" if non_compliant > 0 else "#27ae60"
+            icon = "❌" if non_compliant > 0 else "✅"
+
+            st.markdown(f"""
+            <div style="
+                border-left: 8px solid {border_color};
+                background-color: white;
+                padding: 20px;
+                margin-bottom: 15px;
+                border-radius: 12px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            ">
+                <h3>{icon} {row['User']}</h3>
+                <p><b>⏱️ Total Hours:</b> {row['Total_Hours']}</p>
+                <p><b>📅 Days Evaluated:</b> {row['Days_Evaluated']}</p>
+                <p><b>✅ Compliant Days:</b> {row['Compliant_Days']}</p>
+                <p><b>❌ Non-Compliant Days:</b> {row['Non_Compliant_Days']}</p>
+                <p><b>🟡 Justified Days:</b> {row['Justified_Days']}</p>
+                <p><b>🚨 Failed Dates:</b> {row['Failed_Dates']}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
     # =====================================
     # NON COMPLIANCE
