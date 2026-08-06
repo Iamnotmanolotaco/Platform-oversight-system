@@ -737,42 +737,33 @@ if (
                         <div style="
                             background: {card_background};
                             border: 2px solid {card_border};
-                            border-radius: 18px;
-                            padding: 16px;
+                            border-radius: 16px;
+                            padding: 12px;
                             min-height: 220px;
-                            margin-bottom: 12px;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                            margin-bottom: 10px;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
                         ">
-                            <h4 style="
-                                margin-top: 0;
-                                margin-bottom: 12px;
+                            <div style="
+                                font-size: 16px;
+                                font-weight: bold;
                                 text-align: center;
-                                font-size: 18px;
+                                margin-bottom: 10px;
                             ">
                                 {icon} {row['User']}
-                            </h4>
-
-                            <div style="
-                                display: flex;
-                                flex-direction: column;
-                                gap: 8px;
-                                font-size: 14px;
-                            ">
-                                <div>⏱️ <b>{row['Total_Hours']:.2f}</b> hrs</div>
-                                <div>📅 <b>{int(row['Days_Evaluated'])}</b> días</div>
-                                <div>✅ <b>{int(row['Compliant_Days'])}</b> Cumple</div>
-                                <div>❌ <b>{int(row['Non_Compliant_Days'])}</b> Incumple</div>
-                                <div>🟡 <b>{int(row['Justified_Days'])}</b> Justificados</div>
                             </div>
 
-                            <hr style="
-                                margin: 12px 0;
-                                border: none;
-                                border-top: 1px solid rgba(0,0,0,0.15);
-                            ">
+                            <div style="font-size: 13px; line-height: 1.8;">
+                                ⏱️ <b>{row['Total_Hours']:.2f}</b> hrs<br>
+                                📅 <b>{int(row['Days_Evaluated'])}</b> días<br>
+                                ✅ <b>{int(row['Compliant_Days'])}</b> cumple<br>
+                                ❌ <b>{int(row['Non_Compliant_Days'])}</b> incumple<br>
+                                🟡 <b>{int(row['Justified_Days'])}</b> justificados
+                            </div>
 
-                            <div style="font-size: 12px;">
-                                <b>Fechas con incidencia:</b><br>
+                            <hr>
+
+                            <div style="font-size: 11px;">
+                                <b>Fechas con incidencia</b><br>
                                 {row['Failed_Dates']}
                             </div>
                         </div>
