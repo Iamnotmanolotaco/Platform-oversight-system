@@ -595,11 +595,12 @@ if (
     # TABS
     # =====================================
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🚨 Compliance Engine",
         "📋 Activity Detail",
         "👥 Users Summary",
-        "📊 Compliance Summary"
+        "📊 Compliance Summary",
+        "🐛 Debug Toggl"
     ])
 
     # =====================================
@@ -754,6 +755,22 @@ if (
                         """,
                         unsafe_allow_html=True
                     )
+
+    # =====================================
+    # TAB 5 - DEBUG TOGGL
+    # =====================================
+
+    with tab5:
+        st.subheader("Debug Toggl")
+
+        manolo_debug = df_toggl[
+            df_toggl["NORMALIZED_MEMBER"] == normalize_name("Manolo Taco Guancha")
+        ]
+
+        st.dataframe(
+            manolo_debug,
+            use_container_width=True
+        )
 
     # =====================================
     # NON COMPLIANCE
