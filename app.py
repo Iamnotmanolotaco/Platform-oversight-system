@@ -522,8 +522,8 @@ smokeball_file = st.sidebar.file_uploader("Smokeball", type=["xlsx"])
 
 st.sidebar.divider()
 
-start_date = st.sidebar.date_input("Start Date", pd.Timestamp("2026-07-01"))
-end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-07-31"))
+start_date = st.sidebar.date_input("Start Date", pd.Timestamp("2026-08-01"))
+end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-08-31"))
 
 # ==================================================
 # PROCESS
