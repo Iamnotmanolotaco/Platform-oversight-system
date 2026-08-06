@@ -761,14 +761,29 @@ if (
     # =====================================
 
     with tab5:
-        st.subheader("Debug Toggl")
+        st.subheader("Debug User")
 
-        manolo_debug = df_toggl[
-            df_toggl["NORMALIZED_MEMBER"] == normalize_name("Manolo Taco Guancha")
+        debug_user = st.text_input(
+            "User Name",
+            "Manolo Taco Guancha"
+        )
+
+        debug_data = detail_report[
+            detail_report["USER_CORRECT"]
+            .astype(str)
+            .str.contains(
+                debug_user,
+                case=False,
+                na=False
+            )
         ]
 
+        st.write(
+            f"Records Found: {len(debug_data)}"
+        )
+
         st.dataframe(
-            manolo_debug,
+            debug_data,
             use_container_width=True
         )
 
