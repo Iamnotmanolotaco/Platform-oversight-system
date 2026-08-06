@@ -147,7 +147,12 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
+
+    end_dt = (
+        pd.to_datetime(end_date)
+        + pd.Timedelta(days=1)
+        - pd.Timedelta(seconds=1)
+)
 
     df_toggl = df_toggl[
         (df_toggl["Date1"] >= start_dt) &
