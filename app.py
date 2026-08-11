@@ -413,7 +413,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     # Inicializar con un valor por defecto (999 = sin horas de asistencia)
-    attendance_comparison["Difference_Pct"] = 999
+    attendance_comparison["Difference_Pct"] = 999.0
 
     # Crear máscara para filas con Attendance_Hours > 0
     mask = attendance_comparison["Attendance_Hours"] > 0
