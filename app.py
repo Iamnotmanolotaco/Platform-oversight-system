@@ -408,20 +408,23 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         attendance_comparison["Attendance_Hours"]
     )
 
-    attendance_comparison["Difference_Pct"] = np.where(
-        attendance_comparison["Attendance_Hours"] > 0,
+    # =========================================
+    # CALCULAR PORCENTAJE DE DIFERENCIA - EVITANDO DIVISIÓN POR CERO
+    # =========================================
 
-        (
-            abs(
-                attendance_comparison["Difference_Hours"]
-            )
-            /
-            attendance_comparison["Attendance_Hours"]
-        ) * 100,
+    # Inicializar con un valor por defecto (999 = sin horas de asistencia)
+    attendance_comparison["Difference_Pct"] = 999
 
-        999
-    )
+    # Crear máscara para filas con Attendance_Hours > 0
+    mask = attendance_comparison["Attendance_Hours"] > 0
 
+    # Calcular el porcentaje solo para las filas donde hay horas de asistencia
+    attendance_comparison.loc[mask, "Difference_Pct"] = (
+        abs(attendance_comparison.loc[mask, "Difference_Hours"])
+        / attendance_comparison.loc[mask, "Attendance_Hours"]
+    ) * 100
+
+    # Determinar el estado basado en el porcentaje de diferencia
     attendance_comparison["Status"] = np.where(
         attendance_comparison["Difference_Pct"] <= 10,
         "✅ Match",
