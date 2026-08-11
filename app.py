@@ -91,6 +91,10 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     df_uatt = pd.read_excel(attendance_file, sheet_name="NewUATT", engine="openpyxl")
     df_adp = pd.read_excel(attendance_file, sheet_name="NewADP", engine="openpyxl")
 
+    # Limpiar nombres de columnas
+    df_uatt.columns = df_uatt.columns.astype(str).str.strip()
+    df_adp.columns = df_adp.columns.astype(str).str.strip()
+
     # =========================================
     # PARSE NOVELTIES
     # =========================================
@@ -213,14 +217,31 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # DAILY REPORT
     # =========================================
 
-    daily_report = (
-        df_all_time
-        .groupby(["Date1", "USER_CORRECT"], as_index=False)
-        .agg(Total_Hours=("Hours", "sum"))
+    df_all_time["WORK_DATE"] = (
+        pd.to_datetime(df_all_time["Date1"])
+        .dt.floor("D")
     )
 
-    daily_report["Total_Hours"] = daily_report["Total_Hours"].round(2)
-    daily_report["Status"] = "See Compliance Engine"
+    daily_report = (
+        df_all_time
+        .groupby(
+            [
+                "WORK_DATE",
+                "USER_CORRECT"
+            ],
+            as_index=False
+        )
+        .agg(
+            Total_Hours=("Hours", "sum")
+        )
+    )
+
+    daily_report.rename(
+        columns={
+            "WORK_DATE": "Date1"
+        },
+        inplace=True
+    )
 
     # =========================================
     # EMPLOYEE INFO
@@ -266,31 +287,63 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
 
     detail_report = df_all_time.copy()
 
+    # =========================================
+    # ATTENDANCE PROCESSING
+    # =========================================
+
     attendance_uatt = (
-        df_uatt[
-            ["DATE", "Corrected Name", "Hours worked"]
+        df_uatt.rename(
+            columns={
+                "DATE": "Date",
+                "Corrected Name": "User",
+                "Hours worked": "Attendance_Hours"
+            }
+        )[
+            [
+                "Date",
+                "User",
+                "Attendance_Hours"
+            ]
         ]
         .copy()
     )
 
     attendance_adp = (
-        df_adp[
-            ["Date", "Corrected Name", "Hours worked"]
+        df_adp.rename(
+            columns={
+                "Date": "Date",
+                "Corrected Name": "User",
+                "Hours worked": "Attendance_Hours"
+            }
+        )[
+            [
+                "Date",
+                "User",
+                "Attendance_Hours"
+            ]
         ]
         .copy()
     )
 
-    attendance_uatt.columns = [
-        "Date",
-        "User",
-        "Attendance_Hours"
-    ]
+    attendance_uatt["Date"] = pd.to_datetime(
+        attendance_uatt["Date"],
+        errors="coerce"
+    )
 
-    attendance_adp.columns = [
-        "Date",
-        "User",
-        "Attendance_Hours"
-    ]
+    attendance_adp["Date"] = pd.to_datetime(
+        attendance_adp["Date"],
+        errors="coerce"
+    )
+
+    attendance_uatt["Attendance_Hours"] = pd.to_numeric(
+        attendance_uatt["Attendance_Hours"],
+        errors="coerce"
+    ).fillna(0)
+
+    attendance_adp["Attendance_Hours"] = pd.to_numeric(
+        attendance_adp["Attendance_Hours"],
+        errors="coerce"
+    ).fillna(0)
 
     attendance_all = pd.concat(
         [
@@ -300,36 +353,22 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         ignore_index=True
     )
 
-    attendance_all["Date"] = pd.to_datetime(
-        attendance_all["Date"],
-        errors="coerce"
-    )
-
     attendance_all = attendance_all[
         (attendance_all["Date"] >= start_dt) &
         (attendance_all["Date"] <= end_dt)
     ]
 
     platform_daily = (
-        daily_report
-        .copy()
-    )
-
-    platform_daily["Date"] = (
-        platform_daily["Date1"]
-        .dt.floor("D")
-    )
-
-    platform_daily = (
-        platform_daily[
+        daily_report[
             [
-                "Date",
+                "Date1",
                 "USER_CORRECT",
                 "Total_Hours"
             ]
         ]
         .rename(
             columns={
+                "Date1": "Date",
                 "USER_CORRECT": "User",
                 "Total_Hours": "Platform_Hours"
             }
