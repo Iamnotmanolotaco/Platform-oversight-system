@@ -74,7 +74,7 @@ def get_novelty_status(user, target_date, df_novelties):
 
 @st.cache_data
 def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
-                  novelties_file, clg_novelties_file, start_date, end_date):
+                  novelties_file, clg_novelties_file, attendance_file, start_date, end_date):
 
     # =========================================
     # READ FILES
@@ -88,6 +88,8 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     df_clg_novelties = pd.read_excel(clg_novelties_file, sheet_name="Novedades", engine="openpyxl")
     df_special_days = pd.read_excel(novelties_file, sheet_name="Novedades 2", engine="openpyxl")
     df_clg_special_days = pd.read_excel(clg_novelties_file, sheet_name="Novedades 2", engine="openpyxl")
+    df_uatt = pd.read_excel(attendance_file, sheet_name="NewUATT", engine="openpyxl")
+    df_adp = pd.read_excel(attendance_file, sheet_name="NewADP", engine="openpyxl")
 
     # =========================================
     # PARSE NOVELTIES
@@ -152,7 +154,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         pd.to_datetime(end_date)
         + pd.Timedelta(days=1)
         - pd.Timedelta(seconds=1)
-)
+    )
 
     df_toggl = df_toggl[
         (df_toggl["Date1"] >= start_dt) &
@@ -263,6 +265,129 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     detail_report = df_all_time.copy()
+
+    attendance_uatt = (
+        df_uatt[
+            ["DATE", "Corrected Name", "Hours worked"]
+        ]
+        .copy()
+    )
+
+    attendance_adp = (
+        df_adp[
+            ["DATE", "Corrected Name", "Hours worked"]
+        ]
+        .copy()
+    )
+
+    attendance_uatt.columns = [
+        "Date",
+        "User",
+        "Attendance_Hours"
+    ]
+
+    attendance_adp.columns = [
+        "Date",
+        "User",
+        "Attendance_Hours"
+    ]
+
+    attendance_all = pd.concat(
+        [
+            attendance_uatt,
+            attendance_adp
+        ],
+        ignore_index=True
+    )
+
+    attendance_all["Date"] = pd.to_datetime(
+        attendance_all["Date"],
+        errors="coerce"
+    )
+
+    attendance_all = attendance_all[
+        (attendance_all["Date"] >= start_dt) &
+        (attendance_all["Date"] <= end_dt)
+    ]
+
+    platform_daily = (
+        daily_report
+        .copy()
+    )
+
+    platform_daily["Date"] = (
+        platform_daily["Date1"]
+        .dt.floor("D")
+    )
+
+    platform_daily = (
+        platform_daily[
+            [
+                "Date",
+                "USER_CORRECT",
+                "Total_Hours"
+            ]
+        ]
+        .rename(
+            columns={
+                "USER_CORRECT": "User",
+                "Total_Hours": "Platform_Hours"
+            }
+        )
+    )
+
+    attendance_comparison = attendance_all.merge(
+        platform_daily,
+        on=[
+            "Date",
+            "User"
+        ],
+        how="outer"
+    )
+
+    attendance_comparison[
+        "Attendance_Hours"
+    ] = (
+        attendance_comparison[
+            "Attendance_Hours"
+        ]
+        .fillna(0)
+    )
+
+    attendance_comparison[
+        "Platform_Hours"
+    ] = (
+        attendance_comparison[
+            "Platform_Hours"
+        ]
+        .fillna(0)
+    )
+
+    attendance_comparison["Difference_Hours"] = (
+        attendance_comparison["Platform_Hours"]
+        -
+        attendance_comparison["Attendance_Hours"]
+    )
+
+    attendance_comparison["Difference_Pct"] = np.where(
+        attendance_comparison["Attendance_Hours"] > 0,
+
+        (
+            abs(
+                attendance_comparison["Difference_Hours"]
+            )
+            /
+            attendance_comparison["Attendance_Hours"]
+        ) * 100,
+
+        999
+    )
+
+    attendance_comparison["Status"] = np.where(
+        attendance_comparison["Difference_Pct"] <= 10,
+        "✅ Match",
+        "🚨 Review"
+    )
 
     # =========================================
     # COMPLIANCE ENGINE
@@ -502,7 +627,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         compliance_summary["User"].map(failed_dates).fillna("Ninguna")
     )
 
-    return daily_report, detail_report, users_summary, compliance_engine, compliance_summary
+    return daily_report, detail_report, users_summary, compliance_engine, compliance_summary, attendance_comparison
 
 
 # ==================================================
@@ -524,6 +649,7 @@ novelties_file = st.sidebar.file_uploader("Novedades RRHH", type=["xlsx"])
 clg_novelties_file = st.sidebar.file_uploader("Novedades CLG", type=["xlsx"])
 camplegal_file = st.sidebar.file_uploader("Camp Legal", type=["xlsx"])
 smokeball_file = st.sidebar.file_uploader("Smokeball", type=["xlsx"])
+attendance_file = st.sidebar.file_uploader("ADP & UAttend", type=["xlsx"])
 
 st.sidebar.divider()
 
@@ -540,16 +666,18 @@ if (
     novelties_file and
     camplegal_file and
     smokeball_file and
-    clg_novelties_file
+    clg_novelties_file and
+    attendance_file
 ):
 
-    daily_report, detail_report, users_summary, compliance_engine, compliance_summary = process_files(
+    daily_report, detail_report, users_summary, compliance_engine, compliance_summary, attendance_comparison = process_files(
         toggl_file,
         camplegal_file,
         smokeball_file,
         resources_file,
         novelties_file,
         clg_novelties_file,
+        attendance_file,
         start_date,
         end_date
     )
@@ -600,12 +728,13 @@ if (
     # TABS
     # =====================================
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🚨 Compliance Engine",
         "📋 Activity Detail",
         "👥 Users Summary",
         "📊 Compliance Summary",
-        "🐛 Debug Toggl"
+        "🐛 Debug Toggl",
+        "🕒 Attendance Match"
     ])
 
     # =====================================
@@ -789,6 +918,52 @@ if (
 
         st.dataframe(
             debug_data,
+            use_container_width=True
+        )
+
+    # =====================================
+    # TAB 6 - ATTENDANCE MATCH
+    # =====================================
+
+    with tab6:
+        st.subheader("Platform vs Attendance")
+
+        user_filter = st.selectbox(
+            "Employee",
+            ["All Users"] +
+            sorted(
+                attendance_comparison[
+                    "User"
+                ]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+        )
+
+        comparison_view = (
+            attendance_comparison.copy()
+        )
+
+        if user_filter != "All Users":
+            comparison_view = (
+                comparison_view[
+                    comparison_view["User"] == user_filter
+                ]
+            )
+
+        st.dataframe(
+            comparison_view[
+                [
+                    "Date",
+                    "User",
+                    "Attendance_Hours",
+                    "Platform_Hours",
+                    "Difference_Hours",
+                    "Difference_Pct",
+                    "Status"
+                ]
+            ],
             use_container_width=True
         )
 
