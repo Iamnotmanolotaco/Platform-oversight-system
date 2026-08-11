@@ -275,7 +275,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
 
     attendance_adp = (
         df_adp[
-            ["DATE", "Corrected Name", "Hours worked"]
+            ["Date", "Corrected Name", "Hours worked"]
         ]
         .copy()
     )
