@@ -312,9 +312,12 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         ignore_index=True
     )
 
-    attendance_all["Date"] = pd.to_datetime(
-        attendance_all["Date"],
-        errors="coerce"
+    attendance_all["Date"] = (
+        pd.to_datetime(
+            attendance_all["Date"],
+            errors="coerce"
+        )
+        .dt.floor("D")
     )
 
     attendance_all["Attendance_Hours"] = pd.to_numeric(
@@ -327,21 +330,37 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         (attendance_all["Date"] <= end_dt)
     ]
 
-    platform_hours = (
-        daily_report[
-            [
-                "Date1",
-                "USER_CORRECT",
-                "Total_Hours"
-            ]
-        ]
-        .rename(
-            columns={
-                "Date1": "Date",
-                "USER_CORRECT": "User",
-                "Total_Hours": "Platform_Hours"
-            }
+    platform_hours = daily_report.copy()
+
+    platform_hours["Date"] = (
+        pd.to_datetime(
+            platform_hours["Date1"]
         )
+        .dt.floor("D")
+    )
+
+    platform_hours = (
+        platform_hours
+        .groupby(
+            [
+                "Date",
+                "USER_CORRECT"
+            ],
+            as_index=False
+        )
+        .agg(
+            Platform_Hours=(
+                "Total_Hours",
+                "sum"
+            )
+        )
+    )
+
+    platform_hours.rename(
+        columns={
+            "USER_CORRECT": "User"
+        },
+        inplace=True
     )
 
     attendance_comparison = (
