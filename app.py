@@ -139,8 +139,16 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(df_toggl["Date1"], errors="coerce")
+    st.write(df_toggl["Date1"].min())
+    st.write(df_toggl["Date1"].max())
+
     df_camplegal["Date1"] = pd.to_datetime(df_camplegal["Date"], errors="coerce")
+    st.write(df_camplegal["Date1"].min())
+    st.write(df_camplegal["Date1"].max())
+
     df_smokeball["Date1"] = pd.to_datetime(df_smokeball["Date"], errors="coerce")
+    st.write(df_smokeball["Date1"].min())
+    st.write(df_smokeball["Date1"].max())
 
     # =========================================
     # FILTER DATES
@@ -206,6 +214,11 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         [df_toggl_std, df_camplegal_std, df_smokeball_std],
         ignore_index=True
     )
+
+    st.write("Toggl:", len(df_toggl))
+    st.write("Camp Legal:", len(df_camplegal))
+    st.write("Smokeball:", len(df_smokeball))
+    st.write("All Time:", len(df_all_time))
 
     # =========================================
     # DAILY REPORT
@@ -528,8 +541,8 @@ attendance_file = st.sidebar.file_uploader("ADP & UAttend", type=["xlsx"])
 
 st.sidebar.divider()
 
-start_date = st.sidebar.date_input("Start Date", pd.Timestamp("2026-08-01"))
-end_date = st.sidebar.date_input("End Date", pd.Timestamp("2026-08-31"))
+start_date = st.sidebar.date_input("Start Date")
+end_date = st.sidebar.date_input("End Date")
 
 # ==================================================
 # PROCESS
