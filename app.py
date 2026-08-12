@@ -363,12 +363,36 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         inplace=True
     )
 
+    platform_hours["MATCH_USER"] = (
+        platform_hours["User"]
+        .astype(str)
+        .apply(normalize_name)
+    )
+
+    attendance_all["MATCH_USER"] = (
+        attendance_all["User"]
+        .astype(str)
+        .apply(normalize_name)
+    )
+
+    st.write("PLATFORM ROWS")
+    st.write(len(platform_hours))
+
+    st.write("ATTENDANCE ROWS")
+    st.write(len(attendance_all))
+
+    st.write("PLATFORM SAMPLE")
+    st.dataframe(platform_hours.head(10))
+
+    st.write("ATTENDANCE SAMPLE")
+    st.dataframe(attendance_all.head(10))
+
     attendance_comparison = (
         attendance_all.merge(
             platform_hours,
             on=[
                 "Date",
-                "User"
+                "MATCH_USER"
             ],
             how="outer"
         )
@@ -417,6 +441,9 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         ],
         default="🚨 Review"
     )
+
+    st.write("MERGE SAMPLE")
+    st.dataframe(attendance_comparison.head(20))
 
     # =========================================
     # COMPLIANCE ENGINE
