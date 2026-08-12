@@ -371,22 +371,39 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         attendance_comparison["Attendance_Hours"]
     )
 
-    attendance_comparison["Difference_Pct"] = np.where(
-        attendance_comparison["Attendance_Hours"] > 0,
-        (
-            abs(
-                attendance_comparison["Difference_Hours"]
-            )
-            /
-            attendance_comparison["Attendance_Hours"]
-        ) * 100,
-        np.nan
+    attendance_comparison["Difference_Pct"] = np.nan
+
+    valid_hours = (
+        attendance_comparison["Attendance_Hours"] > 0
     )
 
-    attendance_comparison["Status"] = np.where(
-        attendance_comparison["Difference_Pct"] <= 10,
-        "✅ Match",
-        "🚨 Review"
+    attendance_comparison.loc[
+        valid_hours,
+        "Difference_Pct"
+    ] = (
+        abs(
+            attendance_comparison.loc[
+                valid_hours,
+                "Difference_Hours"
+            ]
+        )
+        /
+        attendance_comparison.loc[
+            valid_hours,
+            "Attendance_Hours"
+        ]
+    ) * 100
+
+    attendance_comparison["Status"] = np.select(
+        [
+            attendance_comparison["Attendance_Hours"] == 0,
+            attendance_comparison["Difference_Pct"] <= 10
+        ],
+        [
+            "⚠️ No Attendance",
+            "✅ Match"
+        ],
+        default="🚨 Review"
     )
 
     # =========================================
@@ -464,7 +481,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
                         if len(saturday_user) > 0:
                             required_hours = 4
                         else:
-                            required_hours = 4
+                            required_hours = 0
 
                     elif user_company == "CLG":
                         clg_saturday_user = df_clg_special_days[
