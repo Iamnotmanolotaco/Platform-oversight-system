@@ -541,7 +541,8 @@ if (
     novelties_file and
     camplegal_file and
     smokeball_file and
-    clg_novelties_file
+    clg_novelties_file and
+    attendance_file
 ):
 
     daily_report, detail_report, users_summary, compliance_engine, compliance_summary = process_files(
