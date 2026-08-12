@@ -365,34 +365,27 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         .fillna(0)
     )
 
+    attendance_comparison["Attendance_Hours"] = pd.to_numeric(
+        attendance_comparison["Attendance_Hours"],
+        errors="coerce"
+    )
+
+    attendance_comparison["Platform_Hours"] = pd.to_numeric(
+        attendance_comparison["Platform_Hours"],
+        errors="coerce"
+    )
+
     attendance_comparison["Difference_Hours"] = (
         attendance_comparison["Platform_Hours"]
         -
         attendance_comparison["Attendance_Hours"]
     )
 
-    attendance_comparison["Difference_Pct"] = np.nan
-
-    valid_hours = (
-        attendance_comparison["Attendance_Hours"] > 0
+    attendance_comparison["Difference_Pct"] = np.where(
+        attendance_comparison["Attendance_Hours"] > 0,
+        (np.abs(attendance_comparison["Difference_Hours"]) / attendance_comparison["Attendance_Hours"]) * 100,
+        np.nan
     )
-
-    attendance_comparison.loc[
-        valid_hours,
-        "Difference_Pct"
-    ] = (
-        abs(
-            attendance_comparison.loc[
-                valid_hours,
-                "Difference_Hours"
-            ]
-        )
-        /
-        attendance_comparison.loc[
-            valid_hours,
-            "Attendance_Hours"
-        ]
-    ) * 100
 
     attendance_comparison["Status"] = np.select(
         [
