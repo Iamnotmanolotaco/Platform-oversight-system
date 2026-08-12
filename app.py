@@ -91,10 +91,6 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     df_uatt = pd.read_excel(attendance_file, sheet_name="NewUATT", engine="openpyxl")
     df_adp = pd.read_excel(attendance_file, sheet_name="NewADP", engine="openpyxl")
 
-    # Limpiar nombres de columnas
-    df_uatt.columns = df_uatt.columns.astype(str).str.strip()
-    df_adp.columns = df_adp.columns.astype(str).str.strip()
-
     # =========================================
     # PARSE NOVELTIES
     # =========================================
@@ -217,31 +213,14 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # DAILY REPORT
     # =========================================
 
-    df_all_time["WORK_DATE"] = (
-        pd.to_datetime(df_all_time["Date1"])
-        .dt.floor("D")
-    )
-
     daily_report = (
         df_all_time
-        .groupby(
-            [
-                "WORK_DATE",
-                "USER_CORRECT"
-            ],
-            as_index=False
-        )
-        .agg(
-            Total_Hours=("Hours", "sum")
-        )
+        .groupby(["Date1", "USER_CORRECT"], as_index=False)
+        .agg(Total_Hours=("Hours", "sum"))
     )
 
-    daily_report.rename(
-        columns={
-            "WORK_DATE": "Date1"
-        },
-        inplace=True
-    )
+    daily_report["Total_Hours"] = daily_report["Total_Hours"].round(2)
+    daily_report["Status"] = "See Compliance Engine"
 
     # =========================================
     # EMPLOYEE INFO
@@ -288,62 +267,42 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     detail_report = df_all_time.copy()
 
     # =========================================
-    # ATTENDANCE PROCESSING
+    # ATTENDANCE COMPARISON
     # =========================================
 
     attendance_uatt = (
-        df_uatt.rename(
-            columns={
-                "DATE": "Date",
-                "Corrected Name": "User",
-                "Hours worked": "Attendance_Hours"
-            }
-        )[
+        df_uatt[
             [
-                "Date",
-                "User",
-                "Attendance_Hours"
+                "DATE",
+                "Corrected Name",
+                "Hours worked"
             ]
         ]
         .copy()
     )
+
+    attendance_uatt.columns = [
+        "Date",
+        "User",
+        "Attendance_Hours"
+    ]
 
     attendance_adp = (
-        df_adp.rename(
-            columns={
-                "Date": "Date",
-                "Corrected Name": "User",
-                "Hours worked": "Attendance_Hours"
-            }
-        )[
+        df_adp[
             [
                 "Date",
-                "User",
-                "Attendance_Hours"
+                "Corrected Name",
+                "Hours worked"
             ]
         ]
         .copy()
     )
 
-    attendance_uatt["Date"] = pd.to_datetime(
-        attendance_uatt["Date"],
-        errors="coerce"
-    )
-
-    attendance_adp["Date"] = pd.to_datetime(
-        attendance_adp["Date"],
-        errors="coerce"
-    )
-
-    attendance_uatt["Attendance_Hours"] = pd.to_numeric(
-        attendance_uatt["Attendance_Hours"],
-        errors="coerce"
-    ).fillna(0)
-
-    attendance_adp["Attendance_Hours"] = pd.to_numeric(
-        attendance_adp["Attendance_Hours"],
-        errors="coerce"
-    ).fillna(0)
+    attendance_adp.columns = [
+        "Date",
+        "User",
+        "Attendance_Hours"
+    ]
 
     attendance_all = pd.concat(
         [
@@ -353,12 +312,22 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         ignore_index=True
     )
 
+    attendance_all["Date"] = pd.to_datetime(
+        attendance_all["Date"],
+        errors="coerce"
+    )
+
+    attendance_all["Attendance_Hours"] = pd.to_numeric(
+        attendance_all["Attendance_Hours"],
+        errors="coerce"
+    ).fillna(0)
+
     attendance_all = attendance_all[
         (attendance_all["Date"] >= start_dt) &
         (attendance_all["Date"] <= end_dt)
     ]
 
-    platform_daily = (
+    platform_hours = (
         daily_report[
             [
                 "Date1",
@@ -375,30 +344,24 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         )
     )
 
-    attendance_comparison = attendance_all.merge(
-        platform_daily,
-        on=[
-            "Date",
-            "User"
-        ],
-        how="outer"
+    attendance_comparison = (
+        attendance_all.merge(
+            platform_hours,
+            on=[
+                "Date",
+                "User"
+            ],
+            how="outer"
+        )
     )
 
-    attendance_comparison[
-        "Attendance_Hours"
-    ] = (
-        attendance_comparison[
-            "Attendance_Hours"
-        ]
+    attendance_comparison["Attendance_Hours"] = (
+        attendance_comparison["Attendance_Hours"]
         .fillna(0)
     )
 
-    attendance_comparison[
-        "Platform_Hours"
-    ] = (
-        attendance_comparison[
-            "Platform_Hours"
-        ]
+    attendance_comparison["Platform_Hours"] = (
+        attendance_comparison["Platform_Hours"]
         .fillna(0)
     )
 
@@ -408,23 +371,18 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         attendance_comparison["Attendance_Hours"]
     )
 
-    # =========================================
-    # CALCULAR PORCENTAJE DE DIFERENCIA - EVITANDO DIVISIÓN POR CERO
-    # =========================================
+    attendance_comparison["Difference_Pct"] = np.where(
+        attendance_comparison["Attendance_Hours"] > 0,
+        (
+            abs(
+                attendance_comparison["Difference_Hours"]
+            )
+            /
+            attendance_comparison["Attendance_Hours"]
+        ) * 100,
+        np.nan
+    )
 
-    # Inicializar con un valor por defecto (999 = sin horas de asistencia)
-    attendance_comparison["Difference_Pct"] = 999.0
-
-    # Crear máscara para filas con Attendance_Hours > 0
-    mask = attendance_comparison["Attendance_Hours"] > 0
-
-    # Calcular el porcentaje solo para las filas donde hay horas de asistencia
-    attendance_comparison.loc[mask, "Difference_Pct"] = (
-        abs(attendance_comparison.loc[mask, "Difference_Hours"])
-        / attendance_comparison.loc[mask, "Attendance_Hours"]
-    ) * 100
-
-    # Determinar el estado basado en el porcentaje de diferencia
     attendance_comparison["Status"] = np.where(
         attendance_comparison["Difference_Pct"] <= 10,
         "✅ Match",
@@ -970,13 +928,11 @@ if (
     with tab6:
         st.subheader("Platform vs Attendance")
 
-        user_filter = st.selectbox(
+        employee_filter = st.selectbox(
             "Employee",
             ["All Users"] +
             sorted(
-                attendance_comparison[
-                    "User"
-                ]
+                attendance_comparison["User"]
                 .dropna()
                 .unique()
                 .tolist()
@@ -987,10 +943,10 @@ if (
             attendance_comparison.copy()
         )
 
-        if user_filter != "All Users":
+        if employee_filter != "All Users":
             comparison_view = (
                 comparison_view[
-                    comparison_view["User"] == user_filter
+                    comparison_view["User"] == employee_filter
                 ]
             )
 
