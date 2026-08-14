@@ -401,7 +401,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
             # =========================================
             day_record = daily_report[
                 (daily_report["USER_CORRECT"] == user) &
-                (daily_report["Date1"].dt.date == current_day.date())
+                (daily_report["Work_Date"].dt.date == current_day.date())
             ]
 
             worked_hours = 0.0
@@ -673,7 +673,7 @@ if (
 
         platform_hours["Date"] = (
             pd.to_datetime(
-                platform_hours["Date1"]
+                platform_hours["Work_Date"]
             )
             .dt.floor("D")
         )
