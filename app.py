@@ -177,6 +177,16 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         (df_smokeball["Date1"] <= end_dt)
     ]
 
+    st.write("Toggl registros:", len(df_toggl))
+    st.write("Camp Legal registros:", len(df_camplegal))
+    st.write("Smokeball registros:", len(df_smokeball))
+
+    st.write("Toggl fechas")
+    st.write(df_toggl["Date1"].head())
+
+    st.write("Smokeball fechas")
+    st.write(df_smokeball["Date1"].head())
+
     # =========================================
     # HOURS
     # =========================================
