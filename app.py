@@ -540,7 +540,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
 # ==================================================
 
 st.title("⏱️ Time Control Platform")
-st.markdown("### Phase 8 - Toggl - Camp Legal - Smokeball Validation")
+st.markdown("### Final Phase - Toggl - Camp Legal - Smokeball Validation")
 
 # ==================================================
 # SIDEBAR
