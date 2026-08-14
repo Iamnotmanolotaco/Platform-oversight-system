@@ -234,9 +234,16 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # DAILY REPORT
     # =========================================
 
+    df_all_time["Work_Date"] = (
+        pd.to_datetime(
+            df_all_time["Date1"]
+        )
+        .dt.floor("D")
+    )
+
     daily_report = (
         df_all_time
-        .groupby(["Date1", "USER_CORRECT"], as_index=False)
+        .groupby(["Work_Date", "USER_CORRECT"], as_index=False)
         .agg(Total_Hours=("Hours", "sum"))
     )
 
@@ -640,10 +647,23 @@ if (
             errors="coerce"
         ).fillna(0)
 
+        attendance_all = attendance_all[
+            (attendance_all["Date"] >= pd.to_datetime(start_date))
+            &
+            (
+                attendance_all["Date"]
+                <= (
+                    pd.to_datetime(end_date)
+                    + pd.Timedelta(days=1)
+                    - pd.Timedelta(seconds=1)
+                )
+            )
+        ]
+
         platform_hours = (
             daily_report[
                 [
-                    "Date1",
+                    "Work_Date",
                     "USER_CORRECT",
                     "Total_Hours"
                 ]
@@ -672,6 +692,16 @@ if (
                     "Total_Hours": "Platform_Hours"
                 }
             )
+        )
+
+        attendance_all["User"] = (
+            attendance_all["User"]
+            .apply(normalize_name)
+        )
+
+        platform_hours["User"] = (
+            platform_hours["User"]
+            .apply(normalize_name)
         )
 
         attendance_comparison = attendance_all.merge(
