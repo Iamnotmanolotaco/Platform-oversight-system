@@ -139,16 +139,11 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(df_toggl["Date1"], errors="coerce")
-    st.write(df_toggl["Date1"].min())
-    st.write(df_toggl["Date1"].max())
-
+    
     df_camplegal["Date1"] = pd.to_datetime(df_camplegal["Date"], errors="coerce")
-    st.write(df_camplegal["Date1"].min())
-    st.write(df_camplegal["Date1"].max())
-
+    
     df_smokeball["Date1"] = pd.to_datetime(df_smokeball["Date"], errors="coerce")
-    st.write(df_smokeball["Date1"].min())
-    st.write(df_smokeball["Date1"].max())
+    
 
     # =========================================
     # FILTER DATES
@@ -176,16 +171,6 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         (df_smokeball["Date1"] >= start_dt) &
         (df_smokeball["Date1"] <= end_dt)
     ]
-
-    st.write("Toggl registros:", len(df_toggl))
-    st.write("Camp Legal registros:", len(df_camplegal))
-    st.write("Smokeball registros:", len(df_smokeball))
-
-    st.write("Toggl fechas")
-    st.write(df_toggl["Date1"].head())
-
-    st.write("Smokeball fechas")
-    st.write(df_smokeball["Date1"].head())
 
     # =========================================
     # HOURS
@@ -224,11 +209,6 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         [df_toggl_std, df_camplegal_std, df_smokeball_std],
         ignore_index=True
     )
-
-    st.write("Toggl:", len(df_toggl))
-    st.write("Camp Legal:", len(df_camplegal))
-    st.write("Smokeball:", len(df_smokeball))
-    st.write("All Time:", len(df_all_time))
 
     # =========================================
     # DAILY REPORT
@@ -786,12 +766,11 @@ if (
     # TABS
     # =====================================
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, = st.tabs([
         "🚨 Compliance Engine",
         "📋 Activity Detail",
         "👥 Users Summary",
         "📊 Compliance Summary",
-        "🐛 Debug Toggl",
         "🕒 Attendance Match"
     ])
 
@@ -949,41 +928,10 @@ if (
                     )
 
     # =====================================
-    # TAB 5 - DEBUG TOGGL
+    # TAB 5 - ATTENDANCE MATCH
     # =====================================
 
     with tab5:
-        st.subheader("Debug User")
-
-        debug_user = st.text_input(
-            "User Name",
-            "Manolo Taco Guancha"
-        )
-
-        debug_data = detail_report[
-            detail_report["USER_CORRECT"]
-            .astype(str)
-            .str.contains(
-                debug_user,
-                case=False,
-                na=False
-            )
-        ]
-
-        st.write(
-            f"Records Found: {len(debug_data)}"
-        )
-
-        st.dataframe(
-            debug_data,
-            use_container_width=True
-        )
-
-    # =====================================
-    # TAB 6 - ATTENDANCE MATCH
-    # =====================================
-
-    with tab6:
         st.subheader("Platform vs Attendance")
 
         if len(attendance_comparison) > 0:
