@@ -349,7 +349,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
                         if len(saturday_user) > 0:
                             required_hours = 4
                         else:
-                            required_hours = 4
+                            required_hours = 0
 
                     elif user_company == "CLG":
                         clg_saturday_user = df_clg_special_days[
