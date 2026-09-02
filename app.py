@@ -667,27 +667,35 @@ if (
         default=sorted(users_summary["USER_CORRECT"].dropna().unique())
     )
 
-    users_summary_filtered = users_summary[
-        users_summary["USER_CORRECT"].isin(selected_users)
-    ]
+    if len(selected_users) > 0:
+        users_summary_filtered = users_summary[
+            users_summary["USER_CORRECT"].isin(selected_users)
+        ]
 
-    detail_report_filtered = detail_report[
-        detail_report["USER_CORRECT"].isin(selected_users)
-    ]
+        detail_report_filtered = detail_report[
+            detail_report["USER_CORRECT"].isin(selected_users)
+        ]
 
-    compliance_engine_filtered = compliance_engine[
-        compliance_engine["User"].isin(selected_users)
-    ]
+        compliance_engine_filtered = compliance_engine[
+            compliance_engine["User"].isin(selected_users)
+        ]
 
-    compliance_summary_filtered = compliance_summary[
-        compliance_summary["User"].isin(selected_users)
-    ]
+        compliance_summary_filtered = compliance_summary[
+            compliance_summary["User"].isin(selected_users)
+        ]
 
-    attendance_comparison_filtered = attendance_comparison[
-        attendance_comparison["User"].isin(
-            [normalize_name(x) for x in selected_users]
-        )
-    ] if len(attendance_comparison) > 0 else attendance_comparison
+        attendance_comparison_filtered = attendance_comparison[
+            attendance_comparison["User"].isin(
+                [normalize_name(x) for x in selected_users]
+            )
+        ] if len(attendance_comparison) > 0 else attendance_comparison
+
+    else:
+        users_summary_filtered = users_summary.copy()
+        detail_report_filtered = detail_report.copy()
+        compliance_engine_filtered = compliance_engine.copy()
+        compliance_summary_filtered = compliance_summary.copy()
+        attendance_comparison_filtered = attendance_comparison
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("👥 Users", total_users)
@@ -775,8 +783,21 @@ if (
 
     with tab3:
         st.subheader("Total Hours by User")
+
+        users_filter = st.multiselect(
+            "Employees",
+            sorted(users_summary["USER_CORRECT"].dropna().unique())
+        )
+
+        summary_view = users_summary_filtered.copy()
+
+        if len(users_filter) > 0:
+            summary_view = summary_view[
+                summary_view["USER_CORRECT"].isin(users_filter)
+            ]
+
         st.dataframe(
-            users_summary_filtered[[
+            summary_view[[
                 "USER_CORRECT",
                 "COMPANY",
                 "DEPARTMENT",
@@ -788,7 +809,7 @@ if (
         )
 
         fig_users = px.bar(
-            users_summary_filtered.head(25),
+            summary_view.head(25),
             x="USER_CORRECT",
             y="Total_Hours",
             title="Top Users by Hours"
