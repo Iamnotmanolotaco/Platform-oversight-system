@@ -661,42 +661,6 @@ if (
         ]
     )
 
-    selected_users = st.multiselect(
-        "Select Employees to Display",
-        sorted(users_summary["USER_CORRECT"].dropna().unique()),
-        default=sorted(users_summary["USER_CORRECT"].dropna().unique())
-    )
-
-    if len(selected_users) > 0:
-        users_summary_filtered = users_summary[
-            users_summary["USER_CORRECT"].isin(selected_users)
-        ]
-
-        detail_report_filtered = detail_report[
-            detail_report["USER_CORRECT"].isin(selected_users)
-        ]
-
-        compliance_engine_filtered = compliance_engine[
-            compliance_engine["User"].isin(selected_users)
-        ]
-
-        compliance_summary_filtered = compliance_summary[
-            compliance_summary["User"].isin(selected_users)
-        ]
-
-        attendance_comparison_filtered = attendance_comparison[
-            attendance_comparison["User"].isin(
-                [normalize_name(x) for x in selected_users]
-            )
-        ] if len(attendance_comparison) > 0 else attendance_comparison
-
-    else:
-        users_summary_filtered = users_summary.copy()
-        detail_report_filtered = detail_report.copy()
-        compliance_engine_filtered = compliance_engine.copy()
-        compliance_summary_filtered = compliance_summary.copy()
-        attendance_comparison_filtered = attendance_comparison
-
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("👥 Users", total_users)
     c2.metric("✅ Compliant Days", compliant_days)
@@ -723,6 +687,11 @@ if (
     with tab1:
         st.subheader("Compliance Engine")
 
+        display_users = st.multiselect(
+            "Users to Display",
+            sorted(compliance_engine["User"].dropna().unique())
+        )
+
         compliance_filter = st.selectbox(
             "Compliance Status",
             ["All", "✅ Cumple", "❌ No registró tiempo", "❌ Horas insuficientes"]
@@ -734,7 +703,10 @@ if (
             ["All Users"] + compliance_users
         )
 
-        engine = compliance_engine_filtered.copy()
+        engine = compliance_engine.copy()
+
+        if len(display_users) > 0:
+            engine = engine[engine["User"].isin(display_users)]
 
         if compliance_filter != "All":
             engine = engine[engine["Status"] == compliance_filter]
@@ -754,6 +726,11 @@ if (
     with tab2:
         st.subheader("Activity Detail")
 
+        display_users_activity = st.multiselect(
+            "Users to Display",
+            sorted(detail_report["USER_CORRECT"].dropna().unique())
+        )
+
         users_list = sorted(
             detail_report["USER_CORRECT"]
             .dropna()
@@ -766,7 +743,13 @@ if (
             ["All Users"] + users_list
         )
 
-        detail_view = detail_report_filtered.copy()
+        detail_view = detail_report.copy()
+
+        if len(display_users_activity) > 0:
+            detail_view = detail_view[
+                detail_view["USER_CORRECT"].isin(display_users_activity)
+            ]
+
         if selected_user != "All Users":
             detail_view = detail_view[
                 detail_view["USER_CORRECT"] == selected_user
@@ -784,16 +767,16 @@ if (
     with tab3:
         st.subheader("Total Hours by User")
 
-        users_filter = st.multiselect(
-            "Employees",
+        display_users_summary = st.multiselect(
+            "Users to Display",
             sorted(users_summary["USER_CORRECT"].dropna().unique())
         )
 
-        summary_view = users_summary_filtered.copy()
+        summary_view = users_summary.copy()
 
-        if len(users_filter) > 0:
+        if len(display_users_summary) > 0:
             summary_view = summary_view[
-                summary_view["USER_CORRECT"].isin(users_filter)
+                summary_view["USER_CORRECT"].isin(display_users_summary)
             ]
 
         st.dataframe(
@@ -822,7 +805,7 @@ if (
 
     with tab4:
         st.subheader("Compliance Summary By User")
-        summary_view = compliance_summary_filtered.copy()
+        summary_view = compliance_summary.copy()
 
         summary_users = sorted(summary_view["User"].dropna().unique().tolist())
         selected_summary_user = st.selectbox(
@@ -882,7 +865,7 @@ if (
 
         if len(attendance_comparison) > 0:
             st.dataframe(
-                attendance_comparison_filtered[
+                attendance_comparison[
                     [
                         "Date",
                         "User",
