@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import unicodedata
-from st_aggrid import AgGrid
-from st_aggrid.grid_options_builder import GridOptionsBuilder
 
 # ==================================================
 # CONFIG
@@ -74,36 +72,6 @@ def get_novelty_status(user, target_date, df_novelties):
     return None
 
 
-def show_excel_grid(df):
-
-    gb = GridOptionsBuilder.from_dataframe(df)
-
-    gb.configure_default_column(
-        sortable=True,
-        filter=True,
-        floatingFilter=True,
-        resizable=True
-    )
-
-    if "User" in df.columns:
-        gb.configure_column(
-            "User",
-            filter="agSetColumnFilter"
-        )
-
-    gb.configure_side_bar()
-
-    grid_options = gb.build()
-
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        height=500,
-        theme="streamlit",
-        allow_unsafe_jscode=True,
-        fit_columns_on_grid_load=True
-    )
-
 @st.cache_data
 def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
                   novelties_file, clg_novelties_file, start_date, end_date):
@@ -171,15 +139,23 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # =========================================
 
     df_toggl["Date1"] = pd.to_datetime(df_toggl["Date1"], errors="coerce")
+    
     df_camplegal["Date1"] = pd.to_datetime(df_camplegal["Date"], errors="coerce")
+    
     df_smokeball["Date1"] = pd.to_datetime(df_smokeball["Date"], errors="coerce")
+    
 
     # =========================================
     # FILTER DATES
     # =========================================
 
     start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+    end_dt = (
+        pd.to_datetime(end_date)
+        + pd.Timedelta(days=1)
+        - pd.Timedelta(seconds=1)
+    )
 
     df_toggl = df_toggl[
         (df_toggl["Date1"] >= start_dt) &
@@ -238,7 +214,12 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
     # DAILY REPORT
     # =========================================
 
-    df_all_time["Work_Date"] = pd.to_datetime(df_all_time["Date1"]).dt.floor("D")
+    df_all_time["Work_Date"] = (
+        pd.to_datetime(
+            df_all_time["Date1"]
+        )
+        .dt.floor("D")
+    )
 
     daily_report = (
         df_all_time
@@ -515,6 +496,7 @@ def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
         compliance_summary["User"].map(daily_status).fillna("")
     )
 
+    # Calcular Failed_Dates para cada usuario
     failed_dates = (
         compliance_engine[
             compliance_engine["Status"].isin([
@@ -591,22 +573,54 @@ if (
         df_adp = pd.read_excel(attendance_file, sheet_name="NewADP", engine="openpyxl")
 
         attendance_uatt = (
-            df_uatt[["DATE", "Corrected Name", "Hours worked"]]
+            df_uatt[
+                [
+                    "DATE",
+                    "Corrected Name",
+                    "Hours worked"
+                ]
+            ]
             .copy()
         )
 
-        attendance_uatt.columns = ["Date", "User", "Attendance_Hours"]
+        attendance_uatt.columns = [
+            "Date",
+            "User",
+            "Attendance_Hours"
+        ]
 
         attendance_adp = (
-            df_adp[["Date", "Corrected Name", "Hours worked"]]
+            df_adp[
+                [
+                    "Date",
+                    "Corrected Name",
+                    "Hours worked"
+                ]
+            ]
             .copy()
         )
 
-        attendance_adp.columns = ["Date", "User", "Attendance_Hours"]
+        attendance_adp.columns = [
+            "Date",
+            "User",
+            "Attendance_Hours"
+        ]
 
-        attendance_all = pd.concat([attendance_uatt, attendance_adp], ignore_index=True)
+        attendance_all = pd.concat(
+            [
+                attendance_uatt,
+                attendance_adp
+            ],
+            ignore_index=True
+        )
 
-        attendance_all["Date"] = pd.to_datetime(attendance_all["Date"], errors="coerce").dt.floor("D")
+        attendance_all["Date"] = (
+            pd.to_datetime(
+                attendance_all["Date"],
+                errors="coerce"
+            )
+            .dt.floor("D")
+        )
 
         attendance_all["Attendance_Hours"] = pd.to_numeric(
             attendance_all["Attendance_Hours"],
@@ -614,41 +628,89 @@ if (
         ).fillna(0)
 
         attendance_all = attendance_all[
-            (attendance_all["Date"] >= pd.to_datetime(start_date)) &
-            (attendance_all["Date"] <= pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+            (attendance_all["Date"] >= pd.to_datetime(start_date))
+            &
+            (
+                attendance_all["Date"]
+                <= (
+                    pd.to_datetime(end_date)
+                    + pd.Timedelta(days=1)
+                    - pd.Timedelta(seconds=1)
+                )
+            )
         ]
 
         platform_hours = (
-            daily_report[["Work_Date", "USER_CORRECT", "Total_Hours"]]
+            daily_report[
+                [
+                    "Work_Date",
+                    "USER_CORRECT",
+                    "Total_Hours"
+                ]
+            ]
             .copy()
         )
 
-        platform_hours["Date"] = pd.to_datetime(platform_hours["Work_Date"]).dt.floor("D")
-
-        platform_hours = (
-            platform_hours[["Date", "USER_CORRECT", "Total_Hours"]]
-            .rename(columns={"USER_CORRECT": "User", "Total_Hours": "Platform_Hours"})
+        platform_hours["Date"] = (
+            pd.to_datetime(
+                platform_hours["Work_Date"]
+            )
+            .dt.floor("D")
         )
 
-        attendance_all["User"] = attendance_all["User"].apply(normalize_name)
-        platform_hours["User"] = platform_hours["User"].apply(normalize_name)
+        platform_hours = (
+            platform_hours[
+                [
+                    "Date",
+                    "USER_CORRECT",
+                    "Total_Hours"
+                ]
+            ]
+            .rename(
+                columns={
+                    "USER_CORRECT": "User",
+                    "Total_Hours": "Platform_Hours"
+                }
+            )
+        )
+
+        attendance_all["User"] = (
+            attendance_all["User"]
+            .apply(normalize_name)
+        )
+
+        platform_hours["User"] = (
+            platform_hours["User"]
+            .apply(normalize_name)
+        )
 
         attendance_comparison = attendance_all.merge(
             platform_hours,
-            on=["Date", "User"],
+            on=[
+                "Date",
+                "User"
+            ],
             how="left"
         )
 
-        attendance_comparison["Platform_Hours"] = attendance_comparison["Platform_Hours"].fillna(0)
+        attendance_comparison["Platform_Hours"] = (
+            attendance_comparison["Platform_Hours"]
+            .fillna(0)
+        )
 
         attendance_comparison["Difference_Hours"] = (
-            attendance_comparison["Platform_Hours"] - attendance_comparison["Attendance_Hours"]
+            attendance_comparison["Platform_Hours"]
+            -
+            attendance_comparison["Attendance_Hours"]
         )
 
         attendance_comparison["Difference_Pct"] = (
             attendance_comparison["Difference_Hours"]
             .abs()
-            .div(attendance_comparison["Attendance_Hours"].replace(0, np.nan))
+            .div(
+                attendance_comparison["Attendance_Hours"]
+                .replace(0, np.nan)
+            )
             * 100
         )
 
@@ -693,25 +755,6 @@ if (
         ]
     )
 
-    # =========================================
-    # GLOBAL USER FILTER
-    # =========================================
-
-    report_users = st.multiselect(
-        "📌 Employees to Display",
-        sorted(users_summary["USER_CORRECT"].dropna().unique()),
-        key="global_user_filter"
-    )
-
-    def apply_user_filter(df, column_name):
-        if len(report_users) == 0:
-            return df
-        return df[df[column_name].isin(report_users)]
-
-    # =========================================
-    # METRICS
-    # =========================================
-
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("👥 Users", total_users)
     c2.metric("✅ Compliant Days", compliant_days)
@@ -723,7 +766,7 @@ if (
     # TABS
     # =====================================
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, = st.tabs([
         "🚨 Compliance Engine",
         "📋 Activity Detail",
         "👥 Users Summary",
@@ -757,20 +800,10 @@ if (
         if selected_compliance_user != "All Users":
             engine = engine[engine["User"] == selected_compliance_user]
 
-        engine_view = engine[
-            [
-                "Date",
-                "User",
-                "Hours Worked",
-                "Novelty",
-                "Status"
-            ]
-        ].copy()
-
-        engine_view["Date"] = pd.to_datetime(engine_view["Date"]).dt.strftime("%m/%d/%Y")
-        st.write("Columnas disponibles:", engine_view.columns.tolist())
-        
-        show_excel_grid(engine_view)
+        st.dataframe(
+            engine[["Date", "User", "Hours Worked", "Novelty", "Status"]],
+            use_container_width=True
+        )
 
     # =====================================
     # TAB 2 - ACTIVITY DETAIL
@@ -791,8 +824,7 @@ if (
             ["All Users"] + users_list
         )
 
-        detail_view = apply_user_filter(detail_report.copy(), "USER_CORRECT")
-
+        detail_view = detail_report.copy()
         if selected_user != "All Users":
             detail_view = detail_view[
                 detail_view["USER_CORRECT"] == selected_user
@@ -809,11 +841,8 @@ if (
 
     with tab3:
         st.subheader("Total Hours by User")
-
-        summary_view = apply_user_filter(users_summary.copy(), "USER_CORRECT")
-
         st.dataframe(
-            summary_view[[
+            users_summary[[
                 "USER_CORRECT",
                 "COMPANY",
                 "DEPARTMENT",
@@ -825,7 +854,7 @@ if (
         )
 
         fig_users = px.bar(
-            summary_view.head(25),
+            users_summary.head(25),
             x="USER_CORRECT",
             y="Total_Hours",
             title="Top Users by Hours"
@@ -838,8 +867,7 @@ if (
 
     with tab4:
         st.subheader("Compliance Summary By User")
-
-        summary_view = apply_user_filter(compliance_summary.copy(), "User")
+        summary_view = compliance_summary.copy()
 
         summary_users = sorted(summary_view["User"].dropna().unique().tolist())
         selected_summary_user = st.selectbox(
@@ -861,11 +889,20 @@ if (
 
                 row = summary_view.iloc[i + j]
                 non_compliant = int(row["Non_Compliant_Days"])
+                border_color = "#e74c3c" if non_compliant > 0 else "#27ae60"
                 icon = "❌" if non_compliant > 0 else "✅"
 
                 with cols[j]:
-                    card_background = "#e8f5e9" if non_compliant == 0 else "#fdeaea"
-                    card_border = "#2e7d32" if non_compliant == 0 else "#d32f2f"
+                    card_background = (
+                        "#e8f5e9"
+                        if non_compliant == 0
+                        else "#fdeaea"
+                    )
+                    card_border = (
+                        "#2e7d32"
+                        if non_compliant == 0
+                        else "#d32f2f"
+                    )
 
                     st.markdown(
                         f"""
@@ -898,16 +935,8 @@ if (
         st.subheader("Platform vs Attendance")
 
         if len(attendance_comparison) > 0:
-            attendance_view = attendance_comparison.copy()
-
-            if len(report_users) > 0:
-                normalized_users = [normalize_name(x) for x in report_users]
-                attendance_view = attendance_view[
-                    attendance_view["User"].isin(normalized_users)
-                ]
-
             st.dataframe(
-                attendance_view[
+                attendance_comparison[
                     [
                         "Date",
                         "User",
@@ -921,7 +950,9 @@ if (
                 use_container_width=True
             )
         else:
-            st.info("Upload ADP & UAttend file to enable comparison.")
+            st.info(
+                "Upload ADP & UAttend file to enable comparison."
+            )
 
     # =====================================
     # NON COMPLIANCE
