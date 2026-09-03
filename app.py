@@ -75,7 +75,9 @@ def get_novelty_status(user, target_date, df_novelties):
 
 
 def show_excel_grid(df):
+
     gb = GridOptionsBuilder.from_dataframe(df)
+
     gb.configure_default_column(
         sortable=True,
         filter=True,
@@ -84,7 +86,12 @@ def show_excel_grid(df):
     )
 
     if "User" in df.columns:
-        gb.configure_column("User", filter="agSetColumnFilter")
+        gb.configure_column(
+            "User",
+            filter="agSetColumnFilter"
+        )
+
+    gb.configure_side_bar()
 
     grid_options = gb.build()
 
@@ -93,9 +100,9 @@ def show_excel_grid(df):
         gridOptions=grid_options,
         height=500,
         theme="streamlit",
+        allow_unsafe_jscode=True,
         fit_columns_on_grid_load=True
     )
-
 
 @st.cache_data
 def process_files(toggl_file, camplegal_file, smokeball_file, resources_file,
@@ -761,7 +768,8 @@ if (
         ].copy()
 
         engine_view["Date"] = pd.to_datetime(engine_view["Date"]).dt.strftime("%m/%d/%Y")
-
+        st.write("Columnas disponibles:", engine_view.columns.tolist())
+        
         show_excel_grid(engine_view)
 
     # =====================================
