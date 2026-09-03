@@ -76,16 +76,24 @@ def get_novelty_status(user, target_date, df_novelties):
 
 def show_excel_grid(df):
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(filter=True, sortable=True, resizable=True)
-    gb.configure_side_bar()
+    gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        floatingFilter=True,
+        resizable=True
+    )
+
+    if "User" in df.columns:
+        gb.configure_column("User", filter="agSetColumnFilter")
+
     grid_options = gb.build()
 
     AgGrid(
         df,
         gridOptions=grid_options,
-        fit_columns_on_grid_load=True,
         height=500,
-        theme="streamlit"
+        theme="streamlit",
+        fit_columns_on_grid_load=True
     )
 
 
@@ -734,7 +742,7 @@ if (
             ["All Users"] + compliance_users
         )
 
-        engine = apply_user_filter(compliance_engine.copy(), "User")
+        engine = compliance_engine.copy()
 
         if compliance_filter != "All":
             engine = engine[engine["Status"] == compliance_filter]
@@ -742,17 +750,19 @@ if (
         if selected_compliance_user != "All Users":
             engine = engine[engine["User"] == selected_compliance_user]
 
-        show_excel_grid(
-            engine[
-                [
-                    "Date",
-                    "User",
-                    "Hours Worked",
-                    "Novelty",
-                    "Status"
-                ]
+        engine_view = engine[
+            [
+                "Date",
+                "User",
+                "Hours Worked",
+                "Novelty",
+                "Status"
             ]
-        )
+        ].copy()
+
+        engine_view["Date"] = pd.to_datetime(engine_view["Date"]).dt.strftime("%m/%d/%Y")
+
+        show_excel_grid(engine_view)
 
     # =====================================
     # TAB 2 - ACTIVITY DETAIL
