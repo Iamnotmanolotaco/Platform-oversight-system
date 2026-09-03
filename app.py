@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import unicodedata
+from st_aggrid import AgGrid
+from st_aggrid.grid_options_builder import GridOptionsBuilder
 
 # ==================================================
 # CONFIG
@@ -70,6 +72,21 @@ def get_novelty_status(user, target_date, df_novelties):
     if len(result) > 0:
         return result.iloc[0]["Tipo de Novedad"]
     return None
+
+
+def show_excel_grid(df):
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(filter=True, sortable=True, resizable=True)
+    gb.configure_side_bar()
+    grid_options = gb.build()
+
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        fit_columns_on_grid_load=True,
+        height=500,
+        theme="streamlit"
+    )
 
 
 @st.cache_data
@@ -725,9 +742,16 @@ if (
         if selected_compliance_user != "All Users":
             engine = engine[engine["User"] == selected_compliance_user]
 
-        st.dataframe(
-            engine[["Date", "User", "Hours Worked", "Novelty", "Status"]],
-            use_container_width=True
+        show_excel_grid(
+            engine[
+                [
+                    "Date",
+                    "User",
+                    "Hours Worked",
+                    "Novelty",
+                    "Status"
+                ]
+            ]
         )
 
     # =====================================
